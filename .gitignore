@@ -1,0 +1,53 @@
+# Compiled class file
+*.class
+
+# Log file
+*.log
+
+# Javadocs
+docs/
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# VSCode
+.vscode
+
+# Eclipse
+.settings/
+.project
+.classpath
+.checkstyle
+
+# Gradle
+.gradle/
+build/
+
+#Maven
+target/
+
+# Mac
+.DS_Store
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Other
+bin/
+**/*.class
+**/*.bin
+**/*.build
+**/*.out
+*.tmp
+*.bak
+*.swp
+*~.nib
+*thumbs.db

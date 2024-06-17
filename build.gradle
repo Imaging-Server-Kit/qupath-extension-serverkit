@@ -1,0 +1,105 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    // Version in settings.gradle
+    id 'org.bytedeco.gradle-javacpp-platform'
+}
+
+ext.moduleName = 'qupath.extension.pyalgos'
+ext.qupathVersion = gradle.ext.qupathVersion
+ext.qupathJavaVersion = 17  // Java 17 from QuPath v0.5.0
+
+base {
+    description = "QuPath extension to run Python algorithms"
+    version = "0.1.0"
+    group = "ch.epfl.imaging"
+}
+
+repositories {
+
+    mavenCentral()
+
+    maven {
+        url "https://maven.scijava.org/content/repositories/releases"
+    }
+
+    maven {
+        url "https://maven.scijava.org/content/repositories/snapshots"
+    }
+
+}
+
+dependencies {
+    implementation libs.commons.text
+    // Main QuPath user interface jar - automatically includes other QuPath jars as sub-dependencies
+    shadow "io.github.qupath:qupath-gui-fx:0.5.0"
+    // fxtras
+    shadow libs.qupath.fxtras
+
+
+    // For logging - the version comes from QuPath's version catalog at
+    // https://github.com/qupath/qupath/blob/main/gradle/libs.versions.toml
+    // See https://docs.gradle.org/current/userguide/platforms.html
+    shadow libs.slf4j
+}
+
+jar {
+    manifest {
+        attributes("Implementation-Title": project.name,
+                "Implementation-Version": archiveVersion,
+                "Automatic-Module-Name": moduleName)
+    }
+}
+/*
+ * Copy the LICENSE file into the jar
+ */
+processResources {
+    from("${projectDir}/LICENSE") {
+        into 'licenses/'
+    }
+}
+/*
+ * Define extra 'copyDependencies' task to copy dependencies into the build directory.
+ */
+tasks.register("copyDependencies", Copy) {
+    description "Copy dependencies into the build directory for use elsewhere"
+    group "QuPath"
+
+    from configurations.default
+    into 'build/libs'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(qupathJavaVersion)
+    }
+    if (project.properties['sources']) withSourcesJar()
+    if (project.properties['javadocs']) withJavadocJar()
+}
+
+tasks.withType(Javadoc) {
+    options.encoding = 'UTF-8'
+    def strictJavadoc = findProperty('strictJavadoc')
+    if (!strictJavadoc) {
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+}
+
+tasks.named('compileJava') {
+    options.encoding = 'UTF-8'
+}
+/*
+ * Avoid 'Entry .gitkeep is a duplicate but no duplicate handling strategy has been set.'
+ * when using withSourcesJar()
+ */
+tasks.withType(org.gradle.jvm.tasks.Jar) {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+/*
+ * Support tests with JUnit.
+ */
+tasks.named('test') {
+    useJUnitPlatform()
+}
