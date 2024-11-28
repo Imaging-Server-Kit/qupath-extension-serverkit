@@ -138,8 +138,11 @@ public class PyAlgosHttpClient {
     public boolean isConnected() {
         try {
             HttpResponse<String> httpResponse = this.get("/");
+//            System.out.println("The httpResponse is: " + httpResponse);
             JsonObject response = JsonParser.parseString(httpResponse.body()).getAsJsonObject();
-            return httpResponse.statusCode() == 200 && response.get("message").getAsString().equals("hello");
+//            System.out.println("The response is: " + response);
+//            return httpResponse.statusCode() == 200 && response.get("message").getAsString().equals("hello");
+            return httpResponse.statusCode() == 200;
         } catch (Exception e) {
             return false;
         }
@@ -153,7 +156,8 @@ public class PyAlgosHttpClient {
      * @throws InterruptedException
      */
     public HttpResponse<String> getAlgosNames() throws IOException, InterruptedException {
-        return this.get("/algos_names/");
+//        return this.get("/algos_names/");
+        return this.get("/services");
     }
 
     /**
@@ -177,7 +181,8 @@ public class PyAlgosHttpClient {
      * @throws InterruptedException
      */
     public HttpResponse<String> getAlgoRequiredParams(String algoName) throws IOException, InterruptedException {
-        return this.get("/algos/" + algoName + "/required_parameters");
+        return this.get("/" + algoName + "/parameters");
+//        return this.get("/algos/" + algoName + "/required_parameters");
     }
 
     /**
@@ -252,6 +257,11 @@ public class PyAlgosHttpClient {
      */
     public HttpResponse<String> computeResult(String algoName) throws ExecutionException, InterruptedException {
         return this.post("/image/" + algoName + "/result", "result");
+    }
+
+    public HttpResponse<String> computeOneShot(String algoName, String parameters) throws ExecutionException, InterruptedException {
+        return this.post("/" + algoName, parameters);
+//        return this.post("/" + algoName + "/", parameters);
     }
 
     /**

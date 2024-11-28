@@ -1,9 +1,6 @@
 package qupath.ext.pyalgos.client;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 import ij.ImagePlus;
 import ij.io.FileSaver;
 import javafx.application.Platform;
@@ -21,6 +18,7 @@ import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.TransformedServerBuilder;
+import qupath.lib.io.GsonTools;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
@@ -50,7 +48,7 @@ public class PyAlgosClient {
     private URL apiUrl;
 
     // Default API URL
-    public static String defaultUrl = "http://127.0.0.1:8000";
+    public static String defaultUrl = "http://127.0.0.1:7000";
 
     // The client handling HTTP requests
     private final PyAlgosHttpClient httpClient = new PyAlgosHttpClient();
@@ -107,14 +105,31 @@ public class PyAlgosClient {
      * @return
      * @throws IOException
      */
-    public static List<JsonObject> parseResponseToJsonObjectList(HttpResponse<String> response, String key) throws IOException {
+    public static JsonObject parseResponseToJsonObjectList(HttpResponse<String> response) throws IOException {
+//    public static List<JsonObject> parseResponseToJsonObjectList(HttpResponse<String> response) throws IOException {
         JsonObject object = parseResponseToJsonObject(response);
-        JsonArray array = object.get(key).getAsJsonArray();
-        List<JsonObject> list = new ArrayList<>(array.size());
-        for (JsonElement element : array) {
-            list.add(element.getAsJsonObject());
-        }
-        return list;
+
+        JsonObject properties = object.get("properties").getAsJsonObject();
+
+        // Return properties here?
+        return properties;
+
+        // This is also returned by the schema (a list of required parameters):
+//        JsonArray requiredParams = object.get("required").getAsJsonArray();
+
+//        // Convert properties JsonObject to a List<JsonObject>
+//        List<JsonObject> list = new ArrayList<>();
+//        for (Map.Entry<String, JsonElement> entry : properties.entrySet()) {
+//            JsonObject jsonValue = entry.getValue().getAsJsonObject();
+//            list.add(jsonValue);
+//        }
+//
+////        JsonArray array = object.get(key).getAsJsonArray();
+////        List<JsonObject> list = new ArrayList<>(array.size());
+////        for (JsonElement element : array) {
+////            list.add(element.getAsJsonObject());
+////        }
+//        return list;
     }
 
     /**
@@ -151,7 +166,9 @@ public class PyAlgosClient {
 
     public String[] getAlgos() throws IOException, InterruptedException {
         JsonObject algos = parseResponseToJsonObject(this.httpClient.getAlgosNames());
-        JsonArray algosJsonArray = algos.get("algos_names").getAsJsonArray();
+
+        JsonArray algosJsonArray = algos.get("services").getAsJsonArray();
+//        JsonArray algosJsonArray = algos.get("algos_names").getAsJsonArray();
 
         String[] arr = new String[algosJsonArray.size()];
         for (int i = 0; i < arr.length; i++) {
@@ -191,9 +208,10 @@ public class PyAlgosClient {
         return this.httpClient.sendImage(imageJson);
     }
 
-    public List<JsonObject> getRequiredParameters(String algoName) throws IOException, InterruptedException {
+    public JsonObject getRequiredParameters(String algoName) throws IOException, InterruptedException {
+//    public List<JsonObject> getRequiredParameters(String algoName) throws IOException, InterruptedException {
         HttpResponse<String> paramsResponse = this.httpClient.getAlgoRequiredParams(algoName);
-        return parseResponseToJsonObjectList(paramsResponse, "parameters");
+        return parseResponseToJsonObjectList(paramsResponse);
     }
 
     /**
@@ -314,6 +332,113 @@ public class PyAlgosClient {
                 description, response.statusCode(), detail);
     }
 
+    public void runOneShot(QuPathGUI qupath, QuPathViewer qupathViewer, String algoName, ParameterList parameterList)
+            throws ExecutionException, IOException, InterruptedException {
+
+        Map<String, Object> parametersMap = new LinkedHashMap<>();
+        JsonObject parametersJson = new JsonObject();
+
+        // Convert parameters to JSON
+        if (parameterList != null) {
+            Map<String, Object> map = parameterList.getKeyValueParameters(false);
+            parametersMap.putAll(map);
+//            String parameters = ParameterList.convertToJson(map);
+
+//            Map<String, Object> parametersMap = new LinkedHashMap<>();
+//            parametersMap.put("parameters", map);
+//            String parameters = ParameterList.convertToJson(parametersMap);
+        }
+
+        // Get the image within the selected annotation as JSON with "data" property and b64-encoded
+        PathObject selectedObject = getSelectedObject(qupathViewer);
+        if (selectedObject == null) {
+            Dialogs.showErrorMessage("Python algos error", "No annotation selected");
+            return;
+        }
+        ImageServer<BufferedImage> imageServer = getImageServer(qupathViewer);
+        RegionRequest viewerRegion = getRegionRequest(qupathViewer, imageServer, selectedObject);
+        ImagePlus img = IJTools.convertToImagePlus(imageServer, viewerRegion).getImage();
+        byte[] serializedImage = new FileSaver(img).serialize();
+        String imgEncoded = Base64.getEncoder().encodeToString(serializedImage);
+
+        parametersMap.put("image", imgEncoded);
+
+        String parameters = ParameterList.convertToJson(parametersMap);
+
+        // At this point, we should be ready to send the encoded image and parameters to the server
+        // ...
+
+//        JsonObject imageJson = new JsonObject();
+//        imageJson.addProperty("data", imgEncoded);  // Could this be appended to the parametersJSON?
+//        parametersJson.addProperty("data", imgEncoded);  // Could this be appended to the parametersJSON?
+
+        // Run the algo
+        HttpResponse<String> processingResponse = this.httpClient.computeOneShot(algoName, parameters);
+        if (processingResponse.statusCode() != 201) {
+            logHttpError(processingResponse, "Processing with " + algoName + " failed");
+            return;
+        }
+
+        // Process the response body
+        JsonArray dataTuplesList = JsonParser.parseString(processingResponse.body()).getAsJsonArray();  // This is a list of LayerDataTuple
+        for (JsonElement element : dataTuplesList) {
+            String resultType = element.getAsJsonObject().get("type").getAsString();  // Type of result, e.g. `image`, `labels`, `points`, etc.
+
+//            JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();  // Not used yet
+
+            // Handle segmentation results returned as `features` (polygons)
+            switch (resultType) {
+                case "features":
+                    // Decode the Polygon features
+                    JsonArray encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
+                    Gson gson = GsonTools.getInstance();
+
+                    List<PathObject> pathObjects = encodedData.asList().stream()
+                            .map(e -> PathObjectUtils.parsePathObject(gson, e))
+                            .filter(Objects::nonNull)
+                            .toList();
+
+//                    List<PathObject> detections = this.parseResponseToPathObjectList(encodedData, viewerRegion);
+
+                    // Get the pathObjects (with associated measurements & classification) from the list of features
+                    // in the response's body
+//                    List<PathObject> pathObjects = PathObjectUtils.parsePathObjects(response.body());
+
+                    // Place the pathObjects correctly even if the viewer changed
+                    AffineTransform transform = new AffineTransform();
+                    transform.translate(viewerRegion.getMinX(), viewerRegion.getMinY());
+                    transform.scale(viewerRegion.getDownsample(), viewerRegion.getDownsample());
+                    ImagePlane plane = viewerRegion.getImagePlane();
+
+                    List<PathObject> detections = new ArrayList<>();
+                    for (PathObject pathObject : pathObjects) {
+                        if (!transform.isIdentity()) {
+                            pathObject = PathObjectTools.transformObject(pathObject, transform, true);
+                        }
+                        if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
+                            pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
+                        detections.add(pathObject);
+                    }
+                    // Display the results
+                    this.displayResult(qupath, selectedObject, detections);
+                    break;
+                // None of the rest are handled at the moment
+                case "shapes":
+                    break;
+                case "image":
+                    break;
+                case "labels":
+                    break;
+                case "points":
+                    break;
+                case "tracks":
+                    break;
+                case "vectors":
+                    break;
+            }
+        }
+
+    }
     /**
      * Run the algorithm and display the result
      *
@@ -325,7 +450,7 @@ public class PyAlgosClient {
      */
     public void run(QuPathGUI qupath, QuPathViewer qupathViewer, String algoName, ParameterList parameterList)
             throws ExecutionException, IOException, InterruptedException {
-        // Send the parameters set by the user
+        // Send the parameters set by the user via a POST request (converts the parameters to json)
         if (parameterList != null) {
             HttpResponse<String> parametersResponse = setParameters(algoName, parameterList);
             if (parametersResponse.statusCode() != 201) {

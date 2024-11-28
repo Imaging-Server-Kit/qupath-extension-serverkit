@@ -62,6 +62,7 @@ public class ParametersDialog extends ParameterPanelFX {
         }, btnRun.disabledProperty()));
         // Define its action
         btnRun.setOnAction(e -> handle(e));
+
         // Add it to the bottom of the BorderPane
         btnRun.setMaxWidth(Double.MAX_VALUE);
         btnRun.setPadding(new Insets(5, 5, 5, 5));
@@ -86,15 +87,15 @@ public class ParametersDialog extends ParameterPanelFX {
         if (event.getSource() == btnRun) {
             btnRun.setDisable(true);
             new Thread(() -> {
-                ParameterList userParameterList = this.getParameters();
-                userParameterList.removeParameter(algoName);
+//                ParameterList userParameterList = this.getParameters();  // Useless?
+//                userParameterList.removeParameter(algoName);
                 try {
                     logger.info("Running {}...", algoName);
                     PyAlgosClient client = PyAlgosClient.getInstance();
                     if (!client.isConnected()) {
                         throw new IOException();
                     }
-                    client.run(qupath, qupath.getViewer(), algoName, parameterList);
+                    client.runOneShot(qupath, qupath.getViewer(), algoName, parameterList);  // Shouldn't this be userParameterList?
                 } catch (Exception e) {
                     logger.error(e.getLocalizedMessage());
                 }

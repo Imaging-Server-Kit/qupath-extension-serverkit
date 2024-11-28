@@ -99,8 +99,8 @@ public class PyAlgosUI {
                 return;
             }
 
+            // Get the available algos from the server and add them as menu items
             try {
-                // Get the available algos from the server and add them as menu items
                 this.addAvailableAlgos();
             } catch (IOException | InterruptedException algoExc) {
                 String errMessage = "Client could not retrieve the available algos from the server";
@@ -164,7 +164,9 @@ public class PyAlgosUI {
             }
             try {
                 // Get the list of required parameter for the given algoName (via a request to the server)
-                List<JsonObject> parametersJson = client.getRequiredParameters(algoName);
+                JsonObject parametersJson = client.getRequiredParameters(algoName);
+//                List<JsonObject> parametersJson = client.getRequiredParameters(algoName);
+
                 ParameterList parameterList = ParametersUtils.createParameterList(parametersJson, algoName);
 
                 // If there are parameters, display them in a dialog - if not, run the algorithm directly
@@ -175,7 +177,7 @@ public class PyAlgosUI {
                 } else {
                     logger.info("Running {}...", algoName);
                     try {
-                        client.run(qupath, qupath.getViewer(), algoName, null);
+                        client.runOneShot(qupath, qupath.getViewer(), algoName, null);
                     } catch (Exception e) {
                         logger.error(e.getLocalizedMessage());
                     }

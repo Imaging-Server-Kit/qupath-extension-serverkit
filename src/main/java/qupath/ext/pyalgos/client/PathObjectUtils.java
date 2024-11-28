@@ -7,8 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.lib.io.GsonTools;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -57,29 +55,12 @@ public class PathObjectUtils {
      * @param element
      * @return the PathObject, or null if it cannot be parsed
      */
-    private static PathObject parsePathObject(Gson gson, JsonElement element) {
+    public static PathObject parsePathObject(Gson gson, JsonElement element) {
         if (!element.isJsonObject()) {
             logger.warn("Cannot parse PathObject from {}", element);
             return null;
         }
-        // Get the geojson.Feature as a PathObject
         JsonObject jsonObj = element.getAsJsonObject();
-        PathObject pathObject = gson.fromJson(jsonObj, PathObject.class);
-        // Add the Feature's properties as PathObject's measurements (if the value can be type-casted to a Number)
-        if (jsonObj.has("properties")) {
-            JsonObject properties = jsonObj.get("properties").getAsJsonObject();
-            for (String key : properties.keySet()) {
-                if (key.equals("Classification")) {
-                    pathObject.setPathClass(PathClass.getInstance(properties.get(key).getAsString()));
-                } else {
-                    try {
-                        Number meas = properties.get(key).getAsNumber();
-                        pathObject.getMeasurements().put(key, meas);
-                    } catch (NumberFormatException ignored) {
-                    }
-                }
-            }
-        }
-        return pathObject;
+        return gson.fromJson(jsonObj, PathObject.class);
     }
 }
