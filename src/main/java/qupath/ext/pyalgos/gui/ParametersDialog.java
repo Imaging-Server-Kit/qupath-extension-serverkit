@@ -87,15 +87,13 @@ public class ParametersDialog extends ParameterPanelFX {
         if (event.getSource() == btnRun) {
             btnRun.setDisable(true);
             new Thread(() -> {
-//                ParameterList userParameterList = this.getParameters();  // Useless?
-//                userParameterList.removeParameter(algoName);
                 try {
                     logger.info("Running {}...", algoName);
                     PyAlgosClient client = PyAlgosClient.getInstance();
                     if (!client.isConnected()) {
                         throw new IOException();
                     }
-                    client.runOneShot(qupath, qupath.getViewer(), algoName, parameterList);  // Shouldn't this be userParameterList?
+                    client.run(qupath, qupath.getViewer(), algoName, parameterList);  // Shouldn't this be userParameterList?
                 } catch (Exception e) {
                     logger.error(e.getLocalizedMessage());
                 }

@@ -8,7 +8,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.ext.pyalgos.PyAlgosExtension;
+//import qupath.ext.pyalgos.PyAlgosExtension;
 import qupath.ext.pyalgos.client.ParametersUtils;
 import qupath.ext.pyalgos.client.PyAlgosClient;
 import qupath.fx.dialogs.Dialogs;
@@ -16,15 +16,14 @@ import qupath.fx.utils.GridPaneUtils;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.tools.MenuTools;
 import qupath.lib.plugins.parameters.ParameterList;
-
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.Arrays;
-import java.util.List;
 
-public class PyAlgosUI {
+public class ServerKitUI {
 
-    private final static Logger logger = LoggerFactory.getLogger(PyAlgosExtension.class);
+//    private final static Logger logger = LoggerFactory.getLogger(PyAlgosExtension.class);
+    private final static Logger logger = LoggerFactory.getLogger(ServerKitUI.class);
 
     private final QuPathGUI qupath;
 
@@ -34,7 +33,7 @@ public class PyAlgosUI {
 
     private TextField URLtextField;
 
-    public PyAlgosUI(QuPathGUI qupath, String name, String extMenuName) {
+    public ServerKitUI(QuPathGUI qupath, String name, String extMenuName) {
         super();
         this.qupath = qupath;
         this.extName = name;
@@ -75,7 +74,7 @@ public class PyAlgosUI {
         mi.setOnAction(e -> {
             // Display a dialog window to connect to the server
             GridPane gp = buildConnectionGridPane();
-            boolean confirm = Dialogs.showConfirmDialog("Python algos server URL", gp);
+            boolean confirm = Dialogs.showConfirmDialog("Server URL", gp);
             if (!confirm) return;
             String serverURL = URLtextField.getText();
             if (serverURL == null || serverURL.isEmpty()) return;
@@ -84,26 +83,26 @@ public class PyAlgosUI {
             PyAlgosClient client = PyAlgosClient.getInstance();
             try {
                 client.launchHttpClient(serverURL);
-                String successMessage = "Client successfully connected to server on " + client.getServerURL().toString();
+                String successMessage = "Successfully connected to server on " + client.getServerURL().toString();
                 logger.info(successMessage);
                 Dialogs.showInfoNotification(extName, successMessage);
             } catch (MalformedURLException urlException) {
-                Dialogs.showErrorMessage("Python algos server", "Invalid URL: " + serverURL);
+                Dialogs.showErrorMessage("Algorithm server", "Invalid URL: " + serverURL);
                 clearAlgos();
                 return;
             } catch (IOException ioException) {
-                String ioErrMessage = "Client could not connect to server on " + client.getServerURL().toString();
+                String ioErrMessage = "Could not connect to server on " + client.getServerURL().toString();
                 logger.error(ioErrMessage);
                 Dialogs.showErrorNotification(extName, ioErrMessage);
                 clearAlgos();
                 return;
             }
 
-            // Get the available algos from the server and add them as menu items
+            // Get the available algorithms from the server and add them as menu items
             try {
                 this.addAvailableAlgos();
             } catch (IOException | InterruptedException algoExc) {
-                String errMessage = "Client could not retrieve the available algos from the server";
+                String errMessage = "Could not retrieve algorithms from the server";
                 logger.error(errMessage);
                 Dialogs.showErrorNotification(extName, errMessage);
             }
@@ -127,25 +126,24 @@ public class PyAlgosUI {
      */
     private void addAvailableAlgos() throws IOException, InterruptedException {
         clearAlgos();
-        // Add the algos
         PyAlgosClient client = PyAlgosClient.getInstance();
         if (!client.isConnected()) {
-            String ioErrMessage = "Client could not connect to server on " + client.getServerURL().toString();
+            String ioErrMessage = "Could not connect to server on " + client.getServerURL().toString();
             logger.error(ioErrMessage);
             Dialogs.showErrorNotification(extName, ioErrMessage);
             return;
         }
-        String[] algos = client.getAlgos();
-        if (algos.length == 0) {
+        String[] availableAlgorithms = client.getAlgos();
+        if (availableAlgorithms.length == 0) {
             logger.warn("No algorithms available on the server");
         } else {
-            for (String algoName : algos) {
+            for (String algoName : availableAlgorithms) {
                 MenuItem menuitem = new MenuItem(algoName);
                 Menu pyalgosMenu = qupath.getMenu(extMenuName, false);
                 MenuTools.addMenuItems(pyalgosMenu, menuitem);
                 this.setOnAlgo(menuitem, algoName);
             }
-            logger.info("Added the available algorithms " + Arrays.toString(algos) + " to the " + extMenuName + " menu");
+            logger.info("Added the available algorithms " + Arrays.toString(availableAlgorithms) + " to the " + extMenuName + " menu");
         }
     }
 
@@ -159,14 +157,14 @@ public class PyAlgosUI {
         mi.setOnAction(ae -> {
             PyAlgosClient client = PyAlgosClient.getInstance();
             if (!client.isConnected()) {
-                logger.error("Client could not connect to server on {}", client.getServerURL());
+                logger.error("Could not connect to server on {}", client.getServerURL());
                 return;
             }
             try {
-                // Get the list of required parameter for the given algoName (via a request to the server)
-                JsonObject parametersJson = client.getRequiredParameters(algoName);
-//                List<JsonObject> parametersJson = client.getRequiredParameters(algoName);
+                // Get algorithm parameters from the given algoName
+                JsonObject parametersJson = client.getParameters(algoName);
 
+                // Create a QuPath ParameterList out of these parameters
                 ParameterList parameterList = ParametersUtils.createParameterList(parametersJson, algoName);
 
                 // If there are parameters, display them in a dialog - if not, run the algorithm directly
@@ -177,7 +175,7 @@ public class PyAlgosUI {
                 } else {
                     logger.info("Running {}...", algoName);
                     try {
-                        client.runOneShot(qupath, qupath.getViewer(), algoName, null);
+                        client.run(qupath, qupath.getViewer(), algoName, null);
                     } catch (Exception e) {
                         logger.error(e.getLocalizedMessage());
                     }

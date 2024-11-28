@@ -28,7 +28,6 @@ import qupath.lib.plugins.parameters.ParameterList;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
 import qupath.lib.regions.RegionRequest;
-
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
@@ -106,69 +105,14 @@ public class PyAlgosClient {
      * @throws IOException
      */
     public static JsonObject parseResponseToJsonObjectList(HttpResponse<String> response) throws IOException {
-//    public static List<JsonObject> parseResponseToJsonObjectList(HttpResponse<String> response) throws IOException {
         JsonObject object = parseResponseToJsonObject(response);
-
-        JsonObject properties = object.get("properties").getAsJsonObject();
-
-        // Return properties here?
-        return properties;
-
-        // This is also returned by the schema (a list of required parameters):
-//        JsonArray requiredParams = object.get("required").getAsJsonArray();
-
-//        // Convert properties JsonObject to a List<JsonObject>
-//        List<JsonObject> list = new ArrayList<>();
-//        for (Map.Entry<String, JsonElement> entry : properties.entrySet()) {
-//            JsonObject jsonValue = entry.getValue().getAsJsonObject();
-//            list.add(jsonValue);
-//        }
-//
-////        JsonArray array = object.get(key).getAsJsonArray();
-////        List<JsonObject> list = new ArrayList<>(array.size());
-////        for (JsonElement element : array) {
-////            list.add(element.getAsJsonObject());
-////        }
-//        return list;
-    }
-
-    /**
-     * Parse a {@link HttpResponse} into a list of {@link PathObject}
-     * Adapted from qupath-extension-sam's parseResponse (https://github.com/ksugar/qupath-extension-sam/blob/20bcdbdac26014006e839f8ee295d4438d325e20/src/main/java/org/elephant/sam/tasks/SAMDetectionTask.java#L217)
-     * & applyTransformAndClassification (https://github.com/ksugar/qupath-extension-sam/blob/20bcdbdac26014006e839f8ee295d4438d325e20/src/main/java/org/elephant/sam/Utils.java#L150)
-     *
-     * @param response
-     * @param regionRequest
-     * @return
-     */
-    private List<PathObject> parseResponseToPathObjectList(HttpResponse<String> response, RegionRequest regionRequest) {
-        // Get the pathObjects (with associated measurements & classification) from the list of features
-        // in the response's body
-        List<PathObject> pathObjects = PathObjectUtils.parsePathObjects(response.body());
-
-        // Place the pathObjects correctly even if the viewer changed
-        AffineTransform transform = new AffineTransform();
-        transform.translate(regionRequest.getMinX(), regionRequest.getMinY());
-        transform.scale(regionRequest.getDownsample(), regionRequest.getDownsample());
-        ImagePlane plane = regionRequest.getImagePlane();
-
-        List<PathObject> updatedObjects = new ArrayList<>();
-        for (PathObject pathObject : pathObjects) {
-            if (!transform.isIdentity()) {
-                pathObject = PathObjectTools.transformObject(pathObject, transform, true);
-            }
-            if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
-                pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
-            updatedObjects.add(pathObject);
-        }
-        return updatedObjects;
+        return object.get("properties").getAsJsonObject();
     }
 
     public String[] getAlgos() throws IOException, InterruptedException {
         JsonObject algos = parseResponseToJsonObject(this.httpClient.getAlgosNames());
 
         JsonArray algosJsonArray = algos.get("services").getAsJsonArray();
-//        JsonArray algosJsonArray = algos.get("algos_names").getAsJsonArray();
 
         String[] arr = new String[algosJsonArray.size()];
         for (int i = 0; i < arr.length; i++) {
@@ -178,124 +122,9 @@ public class PyAlgosClient {
         return arr;
     }
 
-    /**
-     * Send the image as a byte array via HTTP POST request
-     *
-     * @param image {{@link ImagePlus}
-     * @return
-     * @throws ExecutionException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> sendImage(ImagePlus image) throws ExecutionException, InterruptedException {
-        byte[] serializedImage = new FileSaver(image).serialize();
-        return this.httpClient.sendImage(serializedImage);
-    }
-
-
-    /**
-     * Send the image as a JsonObject via HTTP POST request
-     *
-     * @param image {{@link ImagePlus}
-     * @return
-     * @throws ExecutionException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> sendImageJson(ImagePlus image) throws ExecutionException, InterruptedException {
-        byte[] serializedImage = new FileSaver(image).serialize();
-        String img = Base64.getEncoder().encodeToString(serializedImage);
-        JsonObject imageJson = new JsonObject();
-        imageJson.addProperty("data", img);
-        return this.httpClient.sendImage(imageJson);
-    }
-
-    public JsonObject getRequiredParameters(String algoName) throws IOException, InterruptedException {
-//    public List<JsonObject> getRequiredParameters(String algoName) throws IOException, InterruptedException {
+    public JsonObject getParameters(String algoName) throws IOException, InterruptedException {
         HttpResponse<String> paramsResponse = this.httpClient.getAlgoRequiredParams(algoName);
         return parseResponseToJsonObjectList(paramsResponse);
-    }
-
-    /**
-     * Set the algorithm's parameters via HTTP POST request
-     *
-     * @param algoName   Name of the algorithm
-     * @param parameters Json-formatted string containing the parameters
-     * @return
-     * @throws ExecutionException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> setParameters(String algoName, String parameters)
-            throws ExecutionException, InterruptedException {
-        return this.httpClient.setAlgoParams(algoName, parameters);
-    }
-
-    /**
-     * Set the algorithm's parameter via HTTP POST request
-     *
-     * @param algoName      Name of the algorithm
-     * @param parameterList The algorithm parameters (name and value)
-     * @return
-     * @throws ExecutionException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> setParameters(String algoName, ParameterList parameterList)
-            throws ExecutionException, InterruptedException {
-        Map<String, Object> map = parameterList.getKeyValueParameters(false);
-        Map<String, Object> parametersMap = new LinkedHashMap<>();
-        parametersMap.put("parameters", map);
-        String parameters = ParameterList.convertToJson(parametersMap);
-        return setParameters(algoName, parameters);
-    }
-
-    /**
-     * Send the POST request to compute the result for the given algoName
-     *
-     * @param algoName
-     * @return
-     * @throws ExecutionException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> computeResult(String algoName) throws ExecutionException, InterruptedException {
-        return this.httpClient.computeResult(algoName);
-    }
-
-
-    /**
-     * Get the computed result via HTTP GET request
-     *
-     * @param algoName
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
-     */
-    public JsonObject getComputedResult(String algoName) throws IOException, InterruptedException {
-        HttpResponse<String> response = this.httpClient.getComputedResult(algoName);
-        return parseResponseToJsonObject(response);
-    }
-
-    /**
-     * Get the geojson features from the computed result via HTTP GET request
-     *
-     * @param algoName
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> getComputedResultFeature(String algoName) throws IOException, InterruptedException {
-        return this.httpClient.getComputedResultFeatures(algoName);
-    }
-
-    /**
-     * Get the specified endpoint result from the computed result via HTTP GET request
-     *
-     * @param algoName
-     * @param endpoint
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
-     */
-    public HttpResponse<String> getComputedResultEndpoint(String algoName, String endpoint)
-            throws IOException, InterruptedException {
-        return this.httpClient.getComputedResultEndpoint(algoName, endpoint);
     }
 
     /**
@@ -332,21 +161,15 @@ public class PyAlgosClient {
                 description, response.statusCode(), detail);
     }
 
-    public void runOneShot(QuPathGUI qupath, QuPathViewer qupathViewer, String algoName, ParameterList parameterList)
+    public void run(QuPathGUI qupath, QuPathViewer qupathViewer, String algoName, ParameterList parameterList)
             throws ExecutionException, IOException, InterruptedException {
 
         Map<String, Object> parametersMap = new LinkedHashMap<>();
-        JsonObject parametersJson = new JsonObject();
 
         // Convert parameters to JSON
         if (parameterList != null) {
             Map<String, Object> map = parameterList.getKeyValueParameters(false);
             parametersMap.putAll(map);
-//            String parameters = ParameterList.convertToJson(map);
-
-//            Map<String, Object> parametersMap = new LinkedHashMap<>();
-//            parametersMap.put("parameters", map);
-//            String parameters = ParameterList.convertToJson(parametersMap);
         }
 
         // Get the image within the selected annotation as JSON with "data" property and b64-encoded
@@ -365,13 +188,6 @@ public class PyAlgosClient {
 
         String parameters = ParameterList.convertToJson(parametersMap);
 
-        // At this point, we should be ready to send the encoded image and parameters to the server
-        // ...
-
-//        JsonObject imageJson = new JsonObject();
-//        imageJson.addProperty("data", imgEncoded);  // Could this be appended to the parametersJSON?
-//        parametersJson.addProperty("data", imgEncoded);  // Could this be appended to the parametersJSON?
-
         // Run the algo
         HttpResponse<String> processingResponse = this.httpClient.computeOneShot(algoName, parameters);
         if (processingResponse.statusCode() != 201) {
@@ -384,8 +200,6 @@ public class PyAlgosClient {
         for (JsonElement element : dataTuplesList) {
             String resultType = element.getAsJsonObject().get("type").getAsString();  // Type of result, e.g. `image`, `labels`, `points`, etc.
 
-//            JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();  // Not used yet
-
             // Handle segmentation results returned as `features` (polygons)
             switch (resultType) {
                 case "features":
@@ -397,12 +211,6 @@ public class PyAlgosClient {
                             .map(e -> PathObjectUtils.parsePathObject(gson, e))
                             .filter(Objects::nonNull)
                             .toList();
-
-//                    List<PathObject> detections = this.parseResponseToPathObjectList(encodedData, viewerRegion);
-
-                    // Get the pathObjects (with associated measurements & classification) from the list of features
-                    // in the response's body
-//                    List<PathObject> pathObjects = PathObjectUtils.parsePathObjects(response.body());
 
                     // Place the pathObjects correctly even if the viewer changed
                     AffineTransform transform = new AffineTransform();
@@ -438,77 +246,6 @@ public class PyAlgosClient {
             }
         }
 
-    }
-    /**
-     * Run the algorithm and display the result
-     *
-     * @param qupath
-     * @param qupathViewer
-     * @param algoName
-     * @return
-     * @throws Exception
-     */
-    public void run(QuPathGUI qupath, QuPathViewer qupathViewer, String algoName, ParameterList parameterList)
-            throws ExecutionException, IOException, InterruptedException {
-        // Send the parameters set by the user via a POST request (converts the parameters to json)
-        if (parameterList != null) {
-            HttpResponse<String> parametersResponse = setParameters(algoName, parameterList);
-            if (parametersResponse.statusCode() != 201) {
-                logHttpError(parametersResponse, "Could not set the user parameters");
-                return;
-            }
-        }
-
-        // Send the image selected by the user
-        PathObject selectedObject = getSelectedObject(qupathViewer);
-        if (selectedObject == null) {
-            Dialogs.showErrorMessage("Python algos error", "No annotation selected");
-            return;
-        }
-        ImageServer<BufferedImage> imageServer = getImageServer(qupathViewer);
-        RegionRequest viewerRegion = getRegionRequest(qupathViewer, imageServer, selectedObject);
-        ImagePlus img = IJTools.convertToImagePlus(imageServer, viewerRegion).getImage();
-
-        HttpResponse<String> imgSentResponse = this.sendImage(img);
-        if (imgSentResponse.statusCode() != 201) {
-            logHttpError(imgSentResponse, "Could not send image to server");
-            return;
-        }
-
-        // Run the algo
-        HttpResponse<String> processingResponse = this.computeResult(algoName);
-        if (processingResponse.statusCode() != 201) {
-            // Processing failed, so there is no result to fetch
-            logHttpError(processingResponse, "Processing with " + algoName + " failed");
-            return;
-        }
-
-        // Check which endpoints are available for this algo to display the result accordingly
-        List<String> endpoints = new ArrayList<>();
-        try {
-            JsonObject endpointsJson = parseResponseToJsonObject(processingResponse);
-            JsonArray endpointsArray = endpointsJson.get("output_endpoints").getAsJsonArray();
-            for (JsonElement element : endpointsArray) {
-                endpoints.add(element.getAsString());
-            }
-        } catch (Exception e) {
-            logger.error("Unknown output types, cannot display result");
-            return;
-        }
-        if (endpoints.contains("features")) {
-            HttpResponse<String> resultResponse = this.getComputedResultFeature(algoName);
-            List<PathObject> detections = this.parseResponseToPathObjectList(resultResponse, viewerRegion);
-            this.displayResult(qupath, selectedObject, detections);
-            logger.info("Displaying resulting features from {}", algoName);
-        } else {
-            logger.warn("Unknown display for result with endpoints: {}", Arrays.toString(endpoints.toArray()));
-        }
-
-        HttpResponse<String> deletedHttpResponse = this.httpClient.deleteImageData();
-        if (deletedHttpResponse.statusCode() != 204) {
-            logHttpWarning(deletedHttpResponse,
-                    "Image data could not be deleted from the server");
-        }
     }
 
     /**
