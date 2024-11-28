@@ -33,15 +33,18 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
-import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+import java.net.http.HttpResponse;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 
-public class PyAlgosClient {
+public class Client {
     // Logger
-    private final static Logger logger = LoggerFactory.getLogger(PyAlgosClient.class);
+    private final static Logger logger = LoggerFactory.getLogger(Client.class);
 
     // Python API URL defined by the hostname or IP address and port of the server
     private URL apiUrl;
@@ -50,14 +53,15 @@ public class PyAlgosClient {
     public static String defaultUrl = "http://127.0.0.1:7000";
 
     // The client handling HTTP requests
-    private final PyAlgosHttpClient httpClient = new PyAlgosHttpClient();
+    private final HttpClient httpClient;
 
-    private static PyAlgosClient instance = new PyAlgosClient();
+    private static Client instance = new Client();
 
-    private PyAlgosClient() {
+    private Client() {
+        this.httpClient = HttpClient.newHttpClient();
     }
 
-    public static PyAlgosClient getInstance() {
+    public static Client getInstance() {
         return instance;
     }
 
@@ -67,8 +71,8 @@ public class PyAlgosClient {
             URL = URL.substring(0, URL.length() - 1);
         }
         this.apiUrl = new URL(URL);
-        httpClient.setURL(this.apiUrl);
-        if (!httpClient.isConnected()) throw new IOException();
+
+        if (!this.isConnected()) throw new IOException();
     }
 
     public URL getServerURL() {
@@ -81,7 +85,48 @@ public class PyAlgosClient {
      * @return
      */
     public boolean isConnected() {
-        return this.httpClient.isConnected();
+        try {
+            HttpResponse<String> httpResponse = this.get("/");
+            return httpResponse.statusCode() == 200;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Send an HTTP GET request to the server
+     *
+     * @param path (appended to the apiUrl)
+     * @return {@link HttpResponse<String>} from the server
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    private HttpResponse<String> get(String path) throws IOException, InterruptedException {
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl + path))
+                .header("Content-Type", "application/json").version(HttpClient.Version.HTTP_1_1)
+                .GET()
+                .build();
+        return this.httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Send an HTTP POST request to the server with a body in String
+     *
+     * @param path relative path appended to the apiUrl
+     * @param body Content as {@link String} to be sent in the body of the POST HttpRequest
+     * @return {@link HttpResponse<String>} from the server
+     * @throws ExecutionException
+     * @throws InterruptedException
+     */
+    private HttpResponse<String> post(String path, String body) throws ExecutionException, InterruptedException {
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl + path))
+                .header("Content-Type", "application/json")
+                .version(HttpClient.Version.HTTP_1_1)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return this.httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString()).get();
     }
 
     /**
@@ -110,10 +155,9 @@ public class PyAlgosClient {
     }
 
     public String[] getAlgos() throws IOException, InterruptedException {
-        JsonObject algos = parseResponseToJsonObject(this.httpClient.getAlgosNames());
-
+        HttpResponse<String> servicesResponse = this.get("/services");
+        JsonObject algos = parseResponseToJsonObject(servicesResponse);
         JsonArray algosJsonArray = algos.get("services").getAsJsonArray();
-
         String[] arr = new String[algosJsonArray.size()];
         for (int i = 0; i < arr.length; i++) {
             arr[i] = algosJsonArray.get(i).getAsString();
@@ -123,25 +167,8 @@ public class PyAlgosClient {
     }
 
     public JsonObject getParameters(String algoName) throws IOException, InterruptedException {
-        HttpResponse<String> paramsResponse = this.httpClient.getAlgoRequiredParams(algoName);
+        HttpResponse<String> paramsResponse = this.get("/" + algoName + "/parameters");
         return parseResponseToJsonObjectList(paramsResponse);
-    }
-
-    /**
-     * Log a message at the WARN level with the details of the HTTP response
-     *
-     * @param response
-     * @param description
-     */
-    private void logHttpWarning(HttpResponse<String> response, String description) {
-        String detail = null;
-        try {
-            detail = parseResponseToJsonObject(response).get("detail").getAsString();
-        } catch (IOException ignored) {
-        } finally {
-            logger.warn("{} (HTTP HttpResponse {}: {})",
-                    description, response.statusCode(), detail);
-        }
     }
 
     /**
@@ -189,7 +216,8 @@ public class PyAlgosClient {
         String parameters = ParameterList.convertToJson(parametersMap);
 
         // Run the algo
-        HttpResponse<String> processingResponse = this.httpClient.computeOneShot(algoName, parameters);
+        HttpResponse<String> processingResponse = this.post("/" + algoName, parameters);
+
         if (processingResponse.statusCode() != 201) {
             logHttpError(processingResponse, "Processing with " + algoName + " failed");
             return;
@@ -208,7 +236,7 @@ public class PyAlgosClient {
                     Gson gson = GsonTools.getInstance();
 
                     List<PathObject> pathObjects = encodedData.asList().stream()
-                            .map(e -> PathObjectUtils.parsePathObject(gson, e))
+                            .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
                             .toList();
 
@@ -288,7 +316,7 @@ public class PyAlgosClient {
                         .build();
             } else {
                 // Get an RGB-rendering of the multichannel display
-                return PyAlgosClient.createRenderedServer(qupathViewer);
+                return Client.createRenderedServer(qupathViewer);
             }
         } else {
             return imageServer;

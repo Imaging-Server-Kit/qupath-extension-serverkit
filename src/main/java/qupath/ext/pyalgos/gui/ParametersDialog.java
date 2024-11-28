@@ -11,16 +11,14 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.ext.pyalgos.PyAlgosExtension;
-import qupath.ext.pyalgos.client.PyAlgosClient;
+import qupath.ext.pyalgos.client.Client;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.ParameterPanelFX;
 import qupath.lib.plugins.parameters.ParameterList;
-
 import java.io.IOException;
 
 public class ParametersDialog extends ParameterPanelFX {
-    private final static Logger logger = LoggerFactory.getLogger(PyAlgosExtension.class);
+    private final static Logger logger = LoggerFactory.getLogger(ParametersDialog.class);
     private final Button btnRun = new Button("Run");
 
     private final QuPathGUI qupath;
@@ -61,7 +59,7 @@ public class ParametersDialog extends ParameterPanelFX {
             else return "Run";
         }, btnRun.disabledProperty()));
         // Define its action
-        btnRun.setOnAction(e -> handle(e));
+        btnRun.setOnAction(this::handle);
 
         // Add it to the bottom of the BorderPane
         btnRun.setMaxWidth(Double.MAX_VALUE);
@@ -89,7 +87,7 @@ public class ParametersDialog extends ParameterPanelFX {
             new Thread(() -> {
                 try {
                     logger.info("Running {}...", algoName);
-                    PyAlgosClient client = PyAlgosClient.getInstance();
+                    Client client = Client.getInstance();
                     if (!client.isConnected()) {
                         throw new IOException();
                     }

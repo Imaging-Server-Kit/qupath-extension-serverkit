@@ -1,5 +1,7 @@
 package qupath.ext.pyalgos.gui;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -8,9 +10,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//import qupath.ext.pyalgos.PyAlgosExtension;
-import qupath.ext.pyalgos.client.ParametersUtils;
-import qupath.ext.pyalgos.client.PyAlgosClient;
+import qupath.ext.pyalgos.client.Client;
 import qupath.fx.dialogs.Dialogs;
 import qupath.fx.utils.GridPaneUtils;
 import qupath.lib.gui.QuPathGUI;
@@ -19,10 +19,10 @@ import qupath.lib.plugins.parameters.ParameterList;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.Arrays;
+import java.util.Map;
 
 public class ServerKitUI {
 
-//    private final static Logger logger = LoggerFactory.getLogger(PyAlgosExtension.class);
     private final static Logger logger = LoggerFactory.getLogger(ServerKitUI.class);
 
     private final QuPathGUI qupath;
@@ -50,8 +50,8 @@ public class ServerKitUI {
         gp.setVgap(5.0);
         Label URLLabel = new Label("Enter the Python algos server URL");
         GridPaneUtils.addGridRow(gp, 0, 0, null, URLLabel);
-        URLtextField = new TextField(PyAlgosClient.defaultUrl);
-        GridPaneUtils.addGridRow(gp, 1, 0, "By default: " + PyAlgosClient.defaultUrl, URLtextField);
+        URLtextField = new TextField(Client.defaultUrl);
+        GridPaneUtils.addGridRow(gp, 1, 0, "By default: " + Client.defaultUrl, URLtextField);
         return gp;
     }
 
@@ -80,7 +80,7 @@ public class ServerKitUI {
             if (serverURL == null || serverURL.isEmpty()) return;
 
             // Get the PyAlgoClient instance & connect to the input server URL
-            PyAlgosClient client = PyAlgosClient.getInstance();
+            Client client = Client.getInstance();
             try {
                 client.launchHttpClient(serverURL);
                 String successMessage = "Successfully connected to server on " + client.getServerURL().toString();
@@ -126,7 +126,7 @@ public class ServerKitUI {
      */
     private void addAvailableAlgos() throws IOException, InterruptedException {
         clearAlgos();
-        PyAlgosClient client = PyAlgosClient.getInstance();
+        Client client = Client.getInstance();
         if (!client.isConnected()) {
             String ioErrMessage = "Could not connect to server on " + client.getServerURL().toString();
             logger.error(ioErrMessage);
@@ -155,7 +155,7 @@ public class ServerKitUI {
      */
     public void setOnAlgo(MenuItem mi, String algoName) {
         mi.setOnAction(ae -> {
-            PyAlgosClient client = PyAlgosClient.getInstance();
+            Client client = Client.getInstance();
             if (!client.isConnected()) {
                 logger.error("Could not connect to server on {}", client.getServerURL());
                 return;
@@ -164,21 +164,54 @@ public class ServerKitUI {
                 // Get algorithm parameters from the given algoName
                 JsonObject parametersJson = client.getParameters(algoName);
 
-                // Create a QuPath ParameterList out of these parameters
-                ParameterList parameterList = ParametersUtils.createParameterList(parametersJson, algoName);
-
-                // If there are parameters, display them in a dialog - if not, run the algorithm directly
-                if (!parameterList.getKeyValueParameters(false).isEmpty()) {
-                    // Display the required parameters, when clicking on "Run", read the user-defined values and run the algo
-                    ParametersDialog parametersDialog =
-                            new ParametersDialog(qupath, algoName, parameterList);
-                } else {
+                if (parametersJson == null || parametersJson.isEmpty()) {
+                    // Run the algo directly
                     logger.info("Running {}...", algoName);
                     try {
                         client.run(qupath, qupath.getViewer(), algoName, null);
                     } catch (Exception e) {
                         logger.error(e.getLocalizedMessage());
                     }
+                } else {
+                    // Create a ParameterList
+                    ParameterList parameterList = new ParameterList();
+
+                    // Fill it in
+                    for (Map.Entry<String, JsonElement> entry : parametersJson.entrySet()) {
+                        String key = entry.getKey();
+                        JsonObject parameterValues = entry.getValue().getAsJsonObject();
+                        String prompt = parameterValues.get("title").getAsString();
+                        String description = parameterValues.get("description") != null ? parameterValues.get("description").getAsString() : null;
+                        JsonElement defaultValue = parameterValues.get("default") != null ? parameterValues.get("default") : null;
+
+                        String unit = "[unit undefined]";  // Maybe to extend in the future
+
+                        switch (parameterValues.get("widget_type").getAsString()) {
+                            case "bool":
+                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(), description);
+                                break;
+                            case "int":
+                                parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), unit, description);
+                                break;
+                            case "float":
+                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), unit, description);
+                                break;
+                            case "str":
+                                parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
+                                break;
+                            case "dropdown":
+                                JsonArray choicesArray = parameterValues.get("enum").getAsJsonArray();
+                                String[] choices = new String[choicesArray.size()];
+                                for (int i = 0; i < choicesArray.size(); i++) {
+                                    choices[i] = choicesArray.get(i).getAsString();
+                                }
+                                parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList(), description);
+                                break;
+                        }
+                    }
+
+                    // Create a ParametersDialog
+                    ParametersDialog parametersDialog = new ParametersDialog(qupath, algoName, parameterList);
                 }
             } catch (Exception exception) {
                 logger.error(exception.getLocalizedMessage());
