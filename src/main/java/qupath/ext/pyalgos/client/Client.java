@@ -3,7 +3,6 @@ package qupath.ext.pyalgos.client;
 import com.google.gson.*;
 import ij.ImagePlus;
 import ij.io.FileSaver;
-import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,28 +18,40 @@ import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.TransformedServerBuilder;
 import qupath.lib.io.GsonTools;
+import qupath.lib.objects.PathDetectionObject;
+import qupath.lib.roi.PointsROI;
+import qupath.lib.roi.ROIs;
+import qupath.lib.io.PointIO;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
-import qupath.lib.objects.classes.PathClass;
+import qupath.lib.objects.PathObjectTools;
+//import qupath.lib.objects.PathPointObject;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.plugins.parameters.ParameterList;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
 import qupath.lib.regions.RegionRequest;
+import qupath.lib.geom.Point2;
+import qupath.lib.roi.interfaces.ROI;
+
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.Console;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
 import java.net.http.HttpResponse;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Client {
     // Logger
@@ -228,26 +239,28 @@ public class Client {
         for (JsonElement element : dataTuplesList) {
             String resultType = element.getAsJsonObject().get("type").getAsString();  // Type of result, e.g. `image`, `labels`, `points`, etc.
 
+            // Prepare stuff (tmp)
+            Gson gson = GsonTools.getInstance();
+            AffineTransform transform = new AffineTransform();
+            transform.translate(viewerRegion.getMinX(), viewerRegion.getMinY());
+            transform.scale(viewerRegion.getDownsample(), viewerRegion.getDownsample());
+            ImagePlane plane = viewerRegion.getImagePlane();
+
+            JsonArray encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
+            List<PathObject> detections = new ArrayList<>();
+
             // Handle segmentation results returned as `features` (polygons)
             switch (resultType) {
-                case "features":
-                    // Decode the Polygon features
-                    JsonArray encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
-                    Gson gson = GsonTools.getInstance();
-
-                    List<PathObject> pathObjects = encodedData.asList().stream()
+                case "image":
+                    // Not handled yet.
+                    break;
+                case "labels":
+                    List<PathObject> pathObjectsLabels = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
                             .toList();
 
-                    // Place the pathObjects correctly even if the viewer changed
-                    AffineTransform transform = new AffineTransform();
-                    transform.translate(viewerRegion.getMinX(), viewerRegion.getMinY());
-                    transform.scale(viewerRegion.getDownsample(), viewerRegion.getDownsample());
-                    ImagePlane plane = viewerRegion.getImagePlane();
-
-                    List<PathObject> detections = new ArrayList<>();
-                    for (PathObject pathObject : pathObjects) {
+                    for (PathObject pathObject : pathObjectsLabels) {
                         if (!transform.isIdentity()) {
                             pathObject = PathObjectTools.transformObject(pathObject, transform, true);
                         }
@@ -255,23 +268,68 @@ public class Client {
                             pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
                         detections.add(pathObject);
                     }
-                    // Display the results
-                    this.displayResult(qupath, selectedObject, detections);
-                    break;
-                // None of the rest are handled at the moment
-                case "shapes":
-                    break;
-                case "image":
-                    break;
-                case "labels":
                     break;
                 case "points":
+                    List<Point2> pointDetections = new ArrayList<>();
+                    for (JsonElement pointElement : encodedData) {
+                        JsonObject jsonObject = pointElement.getAsJsonObject();
+                        JsonObject geometry = jsonObject.getAsJsonObject("geometry");
+                        JsonArray coordinates = geometry.getAsJsonArray("coordinates");
+                        double x = coordinates.get(0).getAsJsonArray().get(0).getAsDouble();
+                        double y = coordinates.get(0).getAsJsonArray().get(1).getAsDouble();
+                        Point2 point = new Point2(x, y);
+                        pointDetections.add(point);
+                    }
+
+                    ROI pointsROI = ROIs.createPointsROI(pointDetections, plane);
+                    PathObject pathObjectPoints = PathObjects.createDetectionObject(pointsROI);
+
+                    if (!transform.isIdentity()) {
+                        pathObjectPoints = PathObjectTools.transformObject(pathObjectPoints, transform, true);
+                    }
+                    if (plane != null && !Objects.equals(plane, pathObjectPoints.getROI().getImagePlane()))
+                        pathObjectPoints = PathObjectTools.updatePlane(pathObjectPoints, plane, true, false);
+
+                    detections.add(pathObjectPoints);
                     break;
-                case "tracks":
+                case "boxes":
+                    // Handled just like labels
+                    List<PathObject> pathObjectsBoxes = encodedData.asList().stream()
+                            .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
+                            .filter(Objects::nonNull)
+                            .toList();
+
+                    for (PathObject pathObject : pathObjectsBoxes) {
+                        if (!transform.isIdentity()) {
+                            pathObject = PathObjectTools.transformObject(pathObject, transform, true);
+                        }
+                        if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
+                            pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
+                        detections.add(pathObject);
+                    }
                     break;
                 case "vectors":
+                    // Handled just like labels
+                    List<PathObject> pathObjectsVectors = encodedData.asList().stream()
+                            .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
+                            .filter(Objects::nonNull)
+                            .toList();
+
+                    for (PathObject pathObject : pathObjectsVectors) {
+                        if (!transform.isIdentity()) {
+                            pathObject = PathObjectTools.transformObject(pathObject, transform, true);
+                        }
+                        if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
+                            pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
+                        detections.add(pathObject);
+                    }
+                    break;
+                case "tracks":
+                    // Not handled yet.
                     break;
             }
+            // Display the results
+            this.displayResult(qupath, selectedObject, detections);
         }
 
     }
@@ -372,42 +430,42 @@ public class Client {
             }
             // Update the hierarchy
             hierarchy.fireHierarchyChangedEvent(hierarchy.getRootObject());
-            // Update the available classification classes
-            Platform.runLater(() -> {
-                updateClassifications(qupath, resultObjects);
-            });
+//            // Update the available classification classes
+//            Platform.runLater(() -> {
+//                updateClassifications(qupath, resultObjects);
+//            });
         }
     }
 
-    /**
-     * Update the classification classes by adding the ones from the input list of pathObjects
-     * Based on the promptToPopulateFromImage method in PathClassPane.java from qupath-gui-fx
-     *
-     * @param qupath
-     * @param pathObjects
-     */
-    private void updateClassifications(QuPathGUI qupath, List<PathObject> pathObjects) {
-        Set<PathClass> representedClasses = pathObjects.stream()
-                .map(p -> p.getPathClass())
-                .filter(p -> p != null && p != PathClass.NULL_CLASS)
-                .map(p -> p.getBaseClass())
-                .collect(Collectors.toSet());
-
-        List<PathClass> newClasses = new ArrayList<>(representedClasses);
-        Collections.sort(newClasses);
-        if (newClasses.isEmpty()) {
-            return;
-        }
-
-        newClasses.add(PathClass.StandardPathClasses.IGNORE);
-        ObservableList<PathClass> availablePathClasses = qupath.getAvailablePathClasses();
-        List<PathClass> currentClasses = new ArrayList<>(availablePathClasses);
-        currentClasses.remove(null);
-        if (currentClasses.equals(newClasses)) {
-            return;
-        }
-
-        newClasses.removeAll(availablePathClasses);
-        availablePathClasses.addAll(newClasses);
-    }
+//    /**
+//     * Update the classification classes by adding the ones from the input list of pathObjects
+//     * Based on the promptToPopulateFromImage method in PathClassPane.java from qupath-gui-fx
+//     *
+//     * @param qupath
+//     * @param pathObjects
+//     */
+//    private void updateClassifications(QuPathGUI qupath, List<PathObject> pathObjects) {
+//        Set<PathClass> representedClasses = pathObjects.stream()
+//                .map(p -> p.getPathClass())
+//                .filter(p -> p != null && p != PathClass.NULL_CLASS)
+//                .map(p -> p.getBaseClass())
+//                .collect(Collectors.toSet());
+//
+//        List<PathClass> newClasses = new ArrayList<>(representedClasses);
+//        Collections.sort(newClasses);
+//        if (newClasses.isEmpty()) {
+//            return;
+//        }
+//
+//        newClasses.add(PathClass.StandardPathClasses.IGNORE);
+//        ObservableList<PathClass> availablePathClasses = qupath.getAvailablePathClasses();
+//        List<PathClass> currentClasses = new ArrayList<>(availablePathClasses);
+//        currentClasses.remove(null);
+//        if (currentClasses.equals(newClasses)) {
+//            return;
+//        }
+//
+//        newClasses.removeAll(availablePathClasses);
+//        availablePathClasses.addAll(newClasses);
+//    }
 }
