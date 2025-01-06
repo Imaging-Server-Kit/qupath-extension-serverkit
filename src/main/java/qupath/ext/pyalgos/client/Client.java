@@ -1,4 +1,4 @@
-package qupath.ext.pyalgos.client;
+package qupath.ext.serverkit.client;
 
 import com.google.gson.*;
 import ij.ImagePlus;

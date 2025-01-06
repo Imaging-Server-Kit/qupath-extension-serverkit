@@ -1,11 +1,10 @@
-package qupath.ext.pyalgos;
+package qupath.ext.serverkit;
 
 import qupath.ext.pyalgos.gui.ServerKitUI;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.extensions.QuPathExtension;
 
-
-public class PyAlgosExtension implements QuPathExtension {
+public class ServerkitExtension implements QuPathExtension {
 
     static private String name = "Imaging Server Kit";
 

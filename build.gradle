@@ -7,12 +7,12 @@ plugins {
     id 'org.bytedeco.gradle-javacpp-platform'
 }
 
-ext.moduleName = 'qupath.extension.pyalgos'
+ext.moduleName = 'qupath.extension.serverkit'
 ext.qupathVersion = gradle.ext.qupathVersion
 ext.qupathJavaVersion = 17  // Java 17 from QuPath v0.5.0
 
 base {
-    description = "QuPath extension to run Python algorithms"
+    description = "Run image processing algorithms in QuPath using a client/server interface"
     version = "0.1.0"
     group = "ch.epfl.imaging"
 }

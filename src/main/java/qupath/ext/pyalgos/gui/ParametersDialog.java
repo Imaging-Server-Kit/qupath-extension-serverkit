@@ -1,4 +1,4 @@
-package qupath.ext.pyalgos.gui;
+package qupath.ext.serverkit.gui;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -11,7 +11,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.ext.pyalgos.client.Client;
+import qupath.ext.serverkit.client.Client;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.ParameterPanelFX;
 import qupath.lib.plugins.parameters.ParameterList;

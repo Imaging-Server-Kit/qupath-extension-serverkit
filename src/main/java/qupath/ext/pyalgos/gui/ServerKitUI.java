@@ -1,4 +1,4 @@
-package qupath.ext.pyalgos.gui;
+package qupath.ext.serverkit.gui;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -10,7 +10,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.ext.pyalgos.client.Client;
+import qupath.ext.serverkit.client.Client;
 import qupath.fx.dialogs.Dialogs;
 import qupath.fx.utils.GridPaneUtils;
 import qupath.lib.gui.QuPathGUI;
@@ -59,9 +59,9 @@ public class ServerKitUI {
      * Add a menu item for the connection for the server
      */
     public void addConnectionMenuItem() {
-        Menu pyalgosMenu = qupath.getMenu(extMenuName, true);
+        Menu algosMenu = qupath.getMenu(extMenuName, true);
         MenuItem connectionMenuItem = new MenuItem("Connect...");
-        MenuTools.addMenuItems(pyalgosMenu, connectionMenuItem);
+        MenuTools.addMenuItems(algosMenu, connectionMenuItem);
         this.setOnConnect(connectionMenuItem);
     }
 
@@ -79,7 +79,7 @@ public class ServerKitUI {
             String serverURL = URLtextField.getText();
             if (serverURL == null || serverURL.isEmpty()) return;
 
-            // Get the PyAlgoClient instance & connect to the input server URL
+            // Get the Client instance & connect to the input server URL
             Client client = Client.getInstance();
             try {
                 client.launchHttpClient(serverURL);
@@ -113,8 +113,8 @@ public class ServerKitUI {
      * Remove the existing algorithms from the extension sub-menu
      */
     private void clearAlgos() {
-        Menu pyalgosMenu = qupath.getMenu(extMenuName, false);
-        pyalgosMenu.getItems().clear();
+        Menu algosMenu = qupath.getMenu(extMenuName, false);
+        algosMenu.getItems().clear();
         addConnectionMenuItem();
     }
 
@@ -139,8 +139,8 @@ public class ServerKitUI {
         } else {
             for (String algoName : availableAlgorithms) {
                 MenuItem menuitem = new MenuItem(algoName);
-                Menu pyalgosMenu = qupath.getMenu(extMenuName, false);
-                MenuTools.addMenuItems(pyalgosMenu, menuitem);
+                Menu algosMenu = qupath.getMenu(extMenuName, false);
+                MenuTools.addMenuItems(algosMenu, menuitem);
                 this.setOnAlgo(menuitem, algoName);
             }
             logger.info("Added the available algorithms " + Arrays.toString(availableAlgorithms) + " to the " + extMenuName + " menu");

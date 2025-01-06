@@ -9,7 +9,7 @@ pluginManagement {
         id 'org.bytedeco.gradle-javacpp-platform' version '1.5.9'
     }
 }
-rootProject.name = 'qupath-extension-pyalgos'
+rootProject.name = 'qupath-extension-serverkit'
 
 gradle.ext.qupathVersion = "0.5.1"
 

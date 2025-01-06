@@ -1,1 +1,1 @@
-package qupath.ext.pyalgos;
+package qupath.ext.serverkit;
