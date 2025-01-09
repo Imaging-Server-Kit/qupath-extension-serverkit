@@ -1,6 +1,6 @@
 package qupath.ext.serverkit;
 
-import qupath.ext.pyalgos.gui.ServerKitUI;
+import qupath.ext.serverkit.gui.ServerKitUI;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.extensions.QuPathExtension;
 

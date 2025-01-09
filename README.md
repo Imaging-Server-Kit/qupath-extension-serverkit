@@ -1,4 +1,6 @@
-# Imaging Server Kit: QuPath Extension
+# 🪐 QuPath Extension Server Kit
+
+Connect to an [Imaging Server Kit](https://github.com/Imaging-Server-Kit/imaging-server-kit) server and run algorithms in [QuPath](https://qupath.github.io/).
 
 ## Installation
 
@@ -6,26 +8,12 @@ Drag and drop the latest extension jar file from the [Releases](https://github.c
 
 ## Usage
 
-1. Setup and launch the [server](https://github.com/Imaging-Server-Kit/imaging-server-kit).
+1. Make sure you have an [algorithm server](https://github.com/Imaging-Server-Kit/imaging-server-kit) up and running that you can connect to.
 
-The Serverkit extension is available under the **Extensions** menu.
-
-1. Connect to the server via **Extensions > Imaging Server Kit > Connect...**. Enter the server URL. Once successfully connected to the server, the available algorithms are populated
-   in the sub-menus of **Python algos**.
-
-<!-- ![screenshot_connect](readme_images/connection_window.png "Connection window") -->
-
-1. Create an annotation on an image. For single-channel or RGB images, all the pixels selected will be sent. For multi-channel fluorescence images, only the channel currently selected is sent, and if multiple channels are selected, then an RGB-rendering of the selected channels is sent.
-
-2. Select one of the available algorithm from the **PyAlgos** menu. If there are parameters required for the selected algorithm, as defined on the Python API, a window to set those parameters will be displayed. If the algorithm has no tunable parameters, it will be run directly.
-
-<!-- ![screenshot_parameters](readme_images/parameters_window.png "Parameters window") -->
-
-4. Once the processing is completed successfully, the resulting objects (typically detected cells) are displayed in
-   QuPath.
-   The objects contain their associated measurements (e.g. the detection probability) and classification.
-   On the Python API, the objects correspond to geojson features, defined by their geometry
-   (e.g. the coordinates of the contour of the object) and properties.
+2. Connect to the server via **Extensions > Imaging Server Kit > Connect...**. Enter the server URL (by default, http://localhost:8000) and click "Connect".
+3. This should populate the sub-menu **Extensions > Imaging Server Kit** with the available algorithms.
+4. Open an image and create an annotation on it. Use `Ctrl+Shift+A` to create an annotation on the whole image.
+5. Select one of the available algorithm from the extension sub-menu. A window to set parameters for the selected algorithm will be displayed. Click "Run" to run the algorithm on the selected annotation.
 
 ## For developers: build the project
 

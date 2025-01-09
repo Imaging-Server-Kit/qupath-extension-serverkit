@@ -61,7 +61,7 @@ public class Client {
     private URL apiUrl;
 
     // Default API URL
-    public static String defaultUrl = "http://127.0.0.1:7000";
+    public static String defaultUrl = "http://localhost:8000";
 
     // The client handling HTTP requests
     private final HttpClient httpClient;
@@ -227,7 +227,8 @@ public class Client {
         String parameters = ParameterList.convertToJson(parametersMap);
 
         // Run the algo
-        HttpResponse<String> processingResponse = this.post("/" + algoName, parameters);
+        HttpResponse<String> processingResponse = this.post("/" + algoName + "/process", parameters);
+//        HttpResponse<String> processingResponse = this.post("/" + algoName, parameters);
 
         if (processingResponse.statusCode() != 201) {
             logHttpError(processingResponse, "Processing with " + algoName + " failed");
