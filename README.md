@@ -2,6 +2,8 @@
 
 Connect to an [Imaging Server Kit](https://github.com/Imaging-Server-Kit/imaging-server-kit) server and run algorithms in [QuPath](https://qupath.github.io/).
 
+[qupath_screencast.webm](https://github.com/user-attachments/assets/1bfaf154-a463-40a2-a9aa-8c19f393ddeb)
+
 ## Installation
 
 Drag and drop the latest extension jar file from the [Releases](https://github.com/Imaging-Server-Kit/qupath-extension-serverkit/releases) page into the main QuPath window, then restart QuPath. The extension is compatible with QuPath version **0.5.0** and above.
