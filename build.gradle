@@ -13,7 +13,7 @@ ext.qupathJavaVersion = 17  // Java 17 from QuPath v0.5.0
 
 base {
     description = "Run image processing algorithms in QuPath using a client/server interface"
-    version = "0.1.0"
+    version = "0.2.0"
     group = "ch.epfl.imaging"
 }
 
