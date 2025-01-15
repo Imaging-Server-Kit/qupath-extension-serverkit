@@ -1,3 +1,4 @@
+![EPFL Center for Imaging logo](https://imaging.epfl.ch/resources/logo-for-gitlab.svg)
 # 🪐 QuPath Extension Server Kit
 
 Connect to an [Imaging Server Kit](https://github.com/Imaging-Server-Kit/imaging-server-kit) server and run algorithms in [QuPath](https://qupath.github.io/).
