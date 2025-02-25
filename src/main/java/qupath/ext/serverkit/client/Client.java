@@ -270,6 +270,22 @@ public class Client {
                         detections.add(pathObject);
                     }
                     break;
+                case "instance_mask":
+//                    Same as `labels`
+                    List<PathObject> pathObjectsInstances = encodedData.asList().stream()
+                            .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
+                            .filter(Objects::nonNull)
+                            .toList();
+
+                    for (PathObject pathObject : pathObjectsInstances) {
+                        if (!transform.isIdentity()) {
+                            pathObject = PathObjectTools.transformObject(pathObject, transform, true);
+                        }
+                        if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
+                            pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
+                        detections.add(pathObject);
+                    }
+                    break;
                 case "points":
                     List<Point2> pointDetections = new ArrayList<>();
                     for (JsonElement pointElement : encodedData) {
@@ -332,7 +348,6 @@ public class Client {
             // Display the results
             this.displayResult(qupath, selectedObject, detections);
         }
-
     }
 
     /**
