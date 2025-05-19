@@ -15,6 +15,10 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.ParameterPanelFX;
 import qupath.lib.plugins.parameters.ParameterList;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.awt.Desktop;
+
 import qupath.ext.serverkit.client.Client;
 
 public class ParametersDialog extends ParameterPanelFX {
@@ -35,7 +39,7 @@ public class ParametersDialog extends ParameterPanelFX {
 
         Stage dialog = buildUI();
         if (qupath != null) dialog.initOwner(qupath.getStage());
-        dialog.setTitle(algoName + " parameters");
+        dialog.setTitle(algoName);
         btnRun.requestFocus();
         dialog.show();
     }
@@ -43,6 +47,43 @@ public class ParametersDialog extends ParameterPanelFX {
     public Stage buildUI() {
         // Set padding
         this.getPane().setPadding(new Insets(5, 5, 5, 5));
+
+
+        // Create the "Documentation" button
+        Button btnDocumentation = new Button("Documentation");
+        btnDocumentation.setMaxWidth(Double.MAX_VALUE);
+        btnDocumentation.setPadding(new Insets(5, 5, 5, 5));
+
+        btnDocumentation.setOnAction(event -> {
+            try {
+                Client client = Client.getInstance();
+                if (client.getServerURL() == null) {
+                    // Dialogs.showErrorMessage("Documentation", "Server URL is not set. Please connect to the server first.");
+                    return;
+                }
+                String documentationUrl = client.getServerURL().toString() + "/" + algoName + "/info";
+        
+                // Try using Desktop.browse
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(new URI(documentationUrl));
+                } else {
+                    // Fallback to Runtime.exec for unsupported platforms
+                    String os = System.getProperty("os.name").toLowerCase();
+                    if (os.contains("linux")) {
+                        Runtime.getRuntime().exec(new String[]{"xdg-open", documentationUrl});
+                    } else if (os.contains("mac")) {
+                        Runtime.getRuntime().exec(new String[]{"open", documentationUrl});
+                    } else if (os.contains("win")) {
+                        Runtime.getRuntime().exec(new String[]{"cmd", "/c", "start", documentationUrl});
+                    } else {
+                        throw new UnsupportedOperationException("Cannot open URL on this operating system");
+                    }
+                }
+            } catch (IOException | URISyntaxException e) {
+                logger.error("Failed to open documentation URL", e);
+                // Dialogs.showErrorMessage("Documentation", "Failed to open documentation URL: " + e.getMessage());
+            }
+        });
 
         // Add the parameters to the content of the ScrollPane
         ScrollPane scrollPane = new ScrollPane();
@@ -65,6 +106,9 @@ public class ParametersDialog extends ParameterPanelFX {
         btnRun.setMaxWidth(Double.MAX_VALUE);
         btnRun.setPadding(new Insets(5, 5, 5, 5));
         pane.setBottom(btnRun);
+
+        // Add the "Documentation" button to the top of the BorderPane
+        pane.setTop(btnDocumentation);
 
         // Set the max size for all panels/panes
         this.getPane().setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
