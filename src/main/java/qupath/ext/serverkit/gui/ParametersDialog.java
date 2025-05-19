@@ -11,11 +11,11 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.ext.serverkit.client.Client;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.ParameterPanelFX;
 import qupath.lib.plugins.parameters.ParameterList;
 import java.io.IOException;
+import qupath.ext.serverkit.client.Client;
 
 public class ParametersDialog extends ParameterPanelFX {
     private final static Logger logger = LoggerFactory.getLogger(ParametersDialog.class);
@@ -35,7 +35,7 @@ public class ParametersDialog extends ParameterPanelFX {
 
         Stage dialog = buildUI();
         if (qupath != null) dialog.initOwner(qupath.getStage());
-        dialog.setTitle("Parameters");
+        dialog.setTitle(algoName + " parameters");
         btnRun.requestFocus();
         dialog.show();
     }

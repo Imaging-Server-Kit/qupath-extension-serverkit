@@ -48,7 +48,7 @@ public class ServerKitUI {
         GridPane gp = new GridPane();
         gp.setHgap(5.0);
         gp.setVgap(5.0);
-        Label URLLabel = new Label("Enter the Python algos server URL");
+        Label URLLabel = new Label("Enter the algorithm server URL");
         GridPaneUtils.addGridRow(gp, 0, 0, null, URLLabel);
         URLtextField = new TextField(Client.defaultUrl);
         GridPaneUtils.addGridRow(gp, 1, 0, "By default: " + Client.defaultUrl, URLtextField);
@@ -56,7 +56,7 @@ public class ServerKitUI {
     }
 
     /**
-     * Add a menu item for the connection for the server
+     * Add a menu item for connecting to the server
      */
     public void addConnectionMenuItem() {
         Menu algosMenu = qupath.getMenu(extMenuName, true);
@@ -181,23 +181,27 @@ public class ServerKitUI {
                         String key = entry.getKey();
                         JsonObject parameterValues = entry.getValue().getAsJsonObject();
                         String prompt = parameterValues.get("title").getAsString();
-                        String description = parameterValues.get("description") != null ? parameterValues.get("description").getAsString() : null;
+                        // String description = parameterValues.get("description") != null ? parameterValues.get("description").getAsString() : null;
                         JsonElement defaultValue = parameterValues.get("default") != null ? parameterValues.get("default") : null;
 
-                        String unit = "[unit undefined]";  // Maybe to extend in the future
+                        // String unit = "[unit undefined]";  // Maybe to extend in the future
 
                         switch (parameterValues.get("widget_type").getAsString()) {
                             case "bool":
-                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(), description);
+                                // parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(), description);
+                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean());
                                 break;
                             case "int":
-                                parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), unit, description);
+                                // parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), unit, description);
+                                parameterList.addIntParameter(key, prompt, defaultValue.getAsInt());
                                 break;
                             case "float":
-                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), unit, description);
+                                // parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), unit, description);
+                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble());
                                 break;
                             case "str":
-                                parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
+                                // parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
+                                parameterList.addStringParameter(key, prompt, defaultValue.getAsString());
                                 break;
                             case "dropdown":
                                 JsonArray choicesArray = parameterValues.get("enum").getAsJsonArray();
@@ -205,7 +209,8 @@ public class ServerKitUI {
                                 for (int i = 0; i < choicesArray.size(); i++) {
                                     choices[i] = choicesArray.get(i).getAsString();
                                 }
-                                parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList(), description);
+                                // parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList(), description);
+                                parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList());
                                 break;
                         }
                     }
