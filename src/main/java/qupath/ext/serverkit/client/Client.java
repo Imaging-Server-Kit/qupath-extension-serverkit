@@ -255,7 +255,7 @@ public class Client {
                 case "image":
                     // Not handled yet.
                     break;
-                case "labels":
+                case "mask":
                     List<PathObject> pathObjectsLabels = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
@@ -271,7 +271,7 @@ public class Client {
                     }
                     break;
                 case "instance_mask":
-//                    Same as `labels`
+//                    Same as `mask`
                     List<PathObject> pathObjectsInstances = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
