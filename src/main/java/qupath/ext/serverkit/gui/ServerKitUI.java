@@ -1,36 +1,34 @@
 package qupath.ext.serverkit.gui;
 
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.util.Arrays;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import qupath.ext.serverkit.client.Client;
 import qupath.fx.dialogs.Dialogs;
 import qupath.fx.utils.GridPaneUtils;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.tools.MenuTools;
 import qupath.lib.plugins.parameters.ParameterList;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.util.Arrays;
-import java.util.Map;
 
 public class ServerKitUI {
-
     private final static Logger logger = LoggerFactory.getLogger(ServerKitUI.class);
-
     private final QuPathGUI qupath;
-
     private final String extName;
-
     private final String extMenuName;
-
     private TextField URLtextField;
 
     public ServerKitUI(QuPathGUI qupath, String name, String extMenuName) {
@@ -42,6 +40,7 @@ public class ServerKitUI {
 
     /**
      * Build the GridPane of the window for connecting to the server
+     * 
      * @return
      */
     private GridPane buildConnectionGridPane() {
@@ -72,14 +71,14 @@ public class ServerKitUI {
      */
     private void setOnConnect(MenuItem mi) {
         mi.setOnAction(e -> {
-            // Display a dialog window to connect to the server
             GridPane gp = buildConnectionGridPane();
             boolean confirm = Dialogs.showConfirmDialog("Server URL", gp);
-            if (!confirm) return;
+            if (!confirm)
+                return;
             String serverURL = URLtextField.getText();
-            if (serverURL == null || serverURL.isEmpty()) return;
+            if (serverURL == null || serverURL.isEmpty())
+                return;
 
-            // Get the Client instance & connect to the input server URL
             Client client = Client.getInstance();
             try {
                 client.launchHttpClient(serverURL);
@@ -143,12 +142,14 @@ public class ServerKitUI {
                 MenuTools.addMenuItems(algosMenu, menuitem);
                 this.setOnAlgo(menuitem, algoName);
             }
-            logger.info("Added the available algorithms " + Arrays.toString(availableAlgorithms) + " to the " + extMenuName + " menu");
+            logger.info("Added the available algorithms " + Arrays.toString(availableAlgorithms) + " to the "
+                    + extMenuName + " menu");
         }
     }
 
     /**
-     * Define the action linked to the firing of the algorithm menu item designated by algoName
+     * Define the action linked to the firing of the algorithm menu item designated
+     * by algoName
      *
      * @param mi
      * @param algoName
@@ -173,26 +174,30 @@ public class ServerKitUI {
                         logger.error(e.getLocalizedMessage());
                     }
                 } else {
-                    // Create a ParameterList
                     ParameterList parameterList = new ParameterList();
 
-                    // Fill it in
                     for (Map.Entry<String, JsonElement> entry : parametersJson.entrySet()) {
                         String key = entry.getKey();
                         JsonObject parameterValues = entry.getValue().getAsJsonObject();
                         String prompt = parameterValues.get("title").getAsString();
-                        String description = parameterValues.get("description") != null ? parameterValues.get("description").getAsString() : null;
-                        JsonElement defaultValue = parameterValues.get("default") != null ? parameterValues.get("default") : null;
+                        String description = parameterValues.get("description") != null
+                                ? parameterValues.get("description").getAsString()
+                                : null;
+                        JsonElement defaultValue = parameterValues.get("default") != null
+                                ? parameterValues.get("default")
+                                : null;
 
                         switch (parameterValues.get("widget_type").getAsString()) {
                             case "bool":
-                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(), description);
+                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(),
+                                        description);
                                 break;
                             case "int":
                                 parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), null, description);
                                 break;
                             case "float":
-                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), null, description);
+                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), null,
+                                        description);
                                 break;
                             case "str":
                                 parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
@@ -203,12 +208,12 @@ public class ServerKitUI {
                                 for (int i = 0; i < choicesArray.size(); i++) {
                                     choices[i] = choicesArray.get(i).getAsString();
                                 }
-                                parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList(), description);
+                                parameterList.addChoiceParameter(key, prompt, choices[0],
+                                        Arrays.stream(choices).toList(), description);
                                 break;
                         }
                     }
 
-                    // Create a ParametersDialog
                     ParametersDialog parametersDialog = new ParametersDialog(qupath, algoName, parameterList);
                 }
             } catch (Exception exception) {

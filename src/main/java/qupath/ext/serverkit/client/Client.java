@@ -1,16 +1,44 @@
 package qupath.ext.serverkit.client;
 
-import com.google.gson.*;
+import java.awt.Rectangle;
+import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBuffer;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+
+import javax.imageio.ImageIO;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import ij.ImagePlus;
 import ij.io.FileSaver;
 import javafx.collections.ObservableList;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import qupath.fx.dialogs.Dialogs;
 import qupath.imagej.tools.IJTools;
 import qupath.lib.awt.common.AwtTools;
 import qupath.lib.display.ChannelDisplayInfo;
 import qupath.lib.display.ImageDisplay;
+import qupath.lib.geom.Point2;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.images.servers.RenderedImageServer;
 import qupath.lib.gui.viewer.QuPathViewer;
@@ -18,43 +46,16 @@ import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.TransformedServerBuilder;
 import qupath.lib.io.GsonTools;
-import qupath.lib.objects.PathDetectionObject;
-import qupath.lib.roi.PointsROI;
-import qupath.lib.roi.ROIs;
-import qupath.lib.io.PointIO;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.PathObjects;
-import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.PathObjectTools;
+import qupath.lib.objects.PathObjects;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.plugins.parameters.ParameterList;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.ImageRegion;
 import qupath.lib.regions.RegionRequest;
-import qupath.lib.geom.Point2;
+import qupath.lib.roi.ROIs;
 import qupath.lib.roi.interfaces.ROI;
-
-import java.awt.*;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.Console;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.net.http.HttpResponse;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.imageio.ImageIO;
-import java.awt.image.DataBuffer;
 
 public class Client {
     // Logger
@@ -519,6 +520,11 @@ public class Client {
         }
     }
 
+    /**
+     * Decode base64-encoded strings representing object measurements into 1D arrays of numbers 
+     *
+     * @param base64Str
+     */
     public static List<Float> decodeBase64TiffArray(String base64Str) throws Exception {
         byte[] byteArray = Base64.getDecoder().decode(base64Str);
         ByteArrayInputStream bais = new ByteArrayInputStream(byteArray);
