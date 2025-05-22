@@ -181,27 +181,21 @@ public class ServerKitUI {
                         String key = entry.getKey();
                         JsonObject parameterValues = entry.getValue().getAsJsonObject();
                         String prompt = parameterValues.get("title").getAsString();
-                        // String description = parameterValues.get("description") != null ? parameterValues.get("description").getAsString() : null;
+                        String description = parameterValues.get("description") != null ? parameterValues.get("description").getAsString() : null;
                         JsonElement defaultValue = parameterValues.get("default") != null ? parameterValues.get("default") : null;
-
-                        // String unit = "[unit undefined]";  // Maybe to extend in the future
 
                         switch (parameterValues.get("widget_type").getAsString()) {
                             case "bool":
-                                // parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(), description);
-                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean());
+                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(), description);
                                 break;
                             case "int":
-                                // parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), unit, description);
-                                parameterList.addIntParameter(key, prompt, defaultValue.getAsInt());
+                                parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), null, description);
                                 break;
                             case "float":
-                                // parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), unit, description);
-                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble());
+                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), null, description);
                                 break;
                             case "str":
-                                // parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
-                                parameterList.addStringParameter(key, prompt, defaultValue.getAsString());
+                                parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
                                 break;
                             case "dropdown":
                                 JsonArray choicesArray = parameterValues.get("enum").getAsJsonArray();
@@ -209,8 +203,7 @@ public class ServerKitUI {
                                 for (int i = 0; i < choicesArray.size(); i++) {
                                     choices[i] = choicesArray.get(i).getAsString();
                                 }
-                                // parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList(), description);
-                                parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList());
+                                parameterList.addChoiceParameter(key, prompt, choices[0], Arrays.stream(choices).toList(), description);
                                 break;
                         }
                     }

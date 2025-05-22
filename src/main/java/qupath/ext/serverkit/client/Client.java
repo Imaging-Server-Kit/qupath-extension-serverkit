@@ -24,8 +24,8 @@ import qupath.lib.roi.ROIs;
 import qupath.lib.io.PointIO;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjects;
+import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.PathObjectTools;
-//import qupath.lib.objects.PathPointObject;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.plugins.parameters.ParameterList;
 import qupath.lib.regions.ImagePlane;
@@ -52,6 +52,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import javax.imageio.ImageIO;
+import java.awt.image.DataBuffer;
 
 public class Client {
     // Logger
@@ -83,7 +86,8 @@ public class Client {
         }
         this.apiUrl = new URL(URL);
 
-        if (!this.isConnected()) throw new IOException();
+        if (!this.isConnected())
+            throw new IOException();
     }
 
     public URL getServerURL() {
@@ -125,7 +129,8 @@ public class Client {
      * Send an HTTP POST request to the server with a body in String
      *
      * @param path relative path appended to the apiUrl
-     * @param body Content as {@link String} to be sent in the body of the POST HttpRequest
+     * @param body Content as {@link String} to be sent in the body of the POST
+     *             HttpRequest
      * @return {@link HttpResponse<String>} from the server
      * @throws ExecutionException
      * @throws InterruptedException
@@ -152,7 +157,8 @@ public class Client {
     }
 
     /**
-     * Parse the {@link HttpResponse}'s body as {@link JsonObject}, then parse the list of {@link JsonObject} from the
+     * Parse the {@link HttpResponse}'s body as {@link JsonObject}, then parse the
+     * list of {@link JsonObject} from the
      * value of the JsonObject at the given key
      *
      * @param response
@@ -180,6 +186,12 @@ public class Client {
     public JsonObject getParameters(String algoName) throws IOException, InterruptedException {
         HttpResponse<String> paramsResponse = this.get("/" + algoName + "/parameters");
         return parseResponseToJsonObjectList(paramsResponse);
+    }
+
+    public JsonArray getSampleImages(String algoName) throws IOException, InterruptedException {
+        HttpResponse<String> sampleImagesResponse = this.get("/" + algoName + "/sample_images");
+        JsonObject object = parseResponseToJsonObject(sampleImagesResponse);
+        return object.get("sample_images").getAsJsonArray();
     }
 
     /**
@@ -210,7 +222,8 @@ public class Client {
             parametersMap.putAll(map);
         }
 
-        // Get the image within the selected annotation as JSON with "data" property and b64-encoded
+        // Get the image within the selected annotation as JSON with "data" property and
+        // b64-encoded
         PathObject selectedObject = getSelectedObject(qupathViewer);
         if (selectedObject == null) {
             Dialogs.showErrorMessage("Python algos error", "No annotation selected");
@@ -228,7 +241,6 @@ public class Client {
 
         // Run the algo
         HttpResponse<String> processingResponse = this.post("/" + algoName + "/process", parameters);
-//        HttpResponse<String> processingResponse = this.post("/" + algoName, parameters);
 
         if (processingResponse.statusCode() != 201) {
             logHttpError(processingResponse, "Processing with " + algoName + " failed");
@@ -236,9 +248,9 @@ public class Client {
         }
 
         // Process the response body
-        JsonArray dataTuplesList = JsonParser.parseString(processingResponse.body()).getAsJsonArray();  // This is a list of LayerDataTuple
+        JsonArray dataTuplesList = JsonParser.parseString(processingResponse.body()).getAsJsonArray();
         for (JsonElement element : dataTuplesList) {
-            String resultType = element.getAsJsonObject().get("type").getAsString();  // Type of result, e.g. `image`, `labels`, `points`, etc.
+            String resultType = element.getAsJsonObject().get("type").getAsString();
 
             // Prepare stuff (tmp)
             Gson gson = GsonTools.getInstance();
@@ -253,11 +265,14 @@ public class Client {
             // Handle segmentation results returned as `features` (polygons)
             switch (resultType) {
                 case "image":
-                    // Not handled yet.
+                    Dialogs.showErrorMessage("Unhandled algo type", "Image filtering algorithms aren't supported");
+                    break;
+                case "tracks":
+                    Dialogs.showErrorMessage("Unhandled algo type", "Tracking algorithms aren't supported");
                     break;
                 case "mask":
                     List<PathObject> pathObjectsLabels = encodedData.asList().stream()
-                            .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
+                            .map(e -> parsePathObject(gson, e))
                             .filter(Objects::nonNull)
                             .toList();
 
@@ -271,7 +286,6 @@ public class Client {
                     }
                     break;
                 case "instance_mask":
-//                    Same as `mask`
                     List<PathObject> pathObjectsInstances = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
@@ -287,8 +301,8 @@ public class Client {
                     }
                     break;
                 case "points":
-                    List<Point2> pointDetections = new ArrayList<>();
                     for (JsonElement pointElement : encodedData) {
+                        List<Point2> pointDetections = new ArrayList<>();
                         JsonObject jsonObject = pointElement.getAsJsonObject();
                         JsonObject geometry = jsonObject.getAsJsonObject("geometry");
                         JsonArray coordinates = geometry.getAsJsonArray("coordinates");
@@ -296,18 +310,17 @@ public class Client {
                         double y = coordinates.get(0).getAsJsonArray().get(1).getAsDouble();
                         Point2 point = new Point2(x, y);
                         pointDetections.add(point);
+                        ROI pointsROI = ROIs.createPointsROI(pointDetections, plane);
+                        PathObject pathObjectPoints = PathObjects.createDetectionObject(pointsROI);
+
+                        if (!transform.isIdentity()) {
+                            pathObjectPoints = PathObjectTools.transformObject(pathObjectPoints, transform, true);
+                        }
+                        if (plane != null && !Objects.equals(plane, pathObjectPoints.getROI().getImagePlane()))
+                            pathObjectPoints = PathObjectTools.updatePlane(pathObjectPoints, plane, true, false);
+
+                        detections.add(pathObjectPoints);
                     }
-
-                    ROI pointsROI = ROIs.createPointsROI(pointDetections, plane);
-                    PathObject pathObjectPoints = PathObjects.createDetectionObject(pointsROI);
-
-                    if (!transform.isIdentity()) {
-                        pathObjectPoints = PathObjectTools.transformObject(pathObjectPoints, transform, true);
-                    }
-                    if (plane != null && !Objects.equals(plane, pathObjectPoints.getROI().getImagePlane()))
-                        pathObjectPoints = PathObjectTools.updatePlane(pathObjectPoints, plane, true, false);
-
-                    detections.add(pathObjectPoints);
                     break;
                 case "boxes":
                     // Handled just like labels
@@ -341,13 +354,55 @@ public class Client {
                         detections.add(pathObject);
                     }
                     break;
-                case "tracks":
-                    // Not handled yet.
-                    break;
             }
+
+            // Add decoded `measurements`
+            JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();
+            if (dataParams.has("features")) {
+                JsonObject encodedFeatures = dataParams.getAsJsonObject().get("features").getAsJsonObject();
+                for (int idx = 0; idx < detections.size(); idx++) {
+                    PathObject pathObject = detections.get(idx);
+                    for (String key : encodedFeatures.keySet()) {
+                        System.out.println("Stopping");
+                        try {
+                            String encodedFeature = encodedFeatures.get(key).getAsString();
+                            List<Float> measurements = decodeBase64TiffArray(encodedFeature);
+                            if (idx < measurements.size()) {
+                                pathObject.getMeasurements().put(key, measurements.get(idx));
+                            }
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+
+                }
+            }
+
+            // TODO: Add `classification`
+            // ...
+
             // Display the results
             this.displayResult(qupath, selectedObject, detections);
         }
+    }
+
+    /**
+     * Parse a single PathObject from a JsonElement.
+     * Adapted from qupath-extension-sam's parsePathObjects
+     * (https://github.com/ksugar/qupath-extension-sam/blob/20bcdbdac26014006e839f8ee295d4438d325e20/src/main/java/org/elephant/sam/Utils.java#L85)
+     *
+     * @param gson
+     * @param element
+     * @return the PathObject, or null if it cannot be parsed
+     */
+    private static PathObject parsePathObject(Gson gson, JsonElement element) {
+        if (!element.isJsonObject()) {
+            logger.warn("Cannot parse PathObject from {}", element);
+            return null;
+        }
+        JsonObject jsonObj = element.getAsJsonObject();
+        PathObject pathObject = gson.fromJson(jsonObj, PathObject.class);
+        return pathObject;
     }
 
     /**
@@ -358,14 +413,18 @@ public class Client {
      */
     public static PathObject getSelectedObject(QuPathViewer qupathViewer) {
         PathObject parentObject = qupathViewer.getSelectedObject();
-        if (parentObject != null) parentObject.setLocked(true);
+        if (parentObject != null) // TODO: can we unlock the annotation?
+            parentObject.setLocked(true);
         return parentObject;
     }
 
     /**
-     * Get the {@link ImageServer} depending on the image type and the selected channel
-     * For multichannel fluo images: if a single channel is selected then the pixels of that single channel are sent,
-     * if multiple channels are selected, pixels from a RGB-rendering of the image is sent
+     * Get the {@link ImageServer} depending on the image type and the selected
+     * channel
+     * For multichannel fluo images: if a single channel is selected then the pixels
+     * of that single channel are sent,
+     * if multiple channels are selected, pixels from a RGB-rendering of the image
+     * is sent
      *
      * @param qupathViewer
      * @return
@@ -379,12 +438,14 @@ public class Client {
         ImageDisplay imageDisplay = qupathViewer.getImageDisplay();
         ObservableList<ChannelDisplayInfo> selectedChannels = imageDisplay.selectedChannels();
         ObservableList<ChannelDisplayInfo> availableChannels = imageDisplay.availableChannels();
-        // Cannot get the channel from the roi, selectedObject.getROI().getC() always outputs -1 ?
+        // Cannot get the channel from the roi, selectedObject.getROI().getC() always
+        // outputs -1 ?
 
         if (imageData.isFluorescence()) {
             if (selectedChannels.size() == 1) {
                 // Get the image from the single channel selected
-                // Getting the index because the getName() cannot be passed directly to the input of extractChannels() (e.g. "FITC (C3)" instead of "FITC")
+                // Getting the index because the getName() cannot be passed directly to the
+                // input of extractChannels() (e.g. "FITC (C3)" instead of "FITC")
                 return new TransformedServerBuilder(imageServer)
                         .extractChannels(availableChannels.indexOf(selectedChannels.get(0)))
                         .build();
@@ -399,7 +460,8 @@ public class Client {
 
     /**
      * Create a rendered (RGB) {@link ImageServer} from a QuPath viewer
-     * From qupath-extension-sam (https://github.com/ksugar/qupath-extension-sam/blob/20bcdbdac26014006e839f8ee295d4438d325e20/src/main/java/org/elephant/sam/Utils.java#L210)
+     * From qupath-extension-sam
+     * (https://github.com/ksugar/qupath-extension-sam/blob/20bcdbdac26014006e839f8ee295d4438d325e20/src/main/java/org/elephant/sam/Utils.java#L210)
      *
      * @param viewer
      * @return the image server
@@ -420,11 +482,14 @@ public class Client {
      * @param selectedObject
      * @return
      */
-    public static RegionRequest getRegionRequest(QuPathViewer qupathViewer, ImageServer imageServer, PathObject selectedObject) {
+    public static RegionRequest getRegionRequest(QuPathViewer qupathViewer, ImageServer imageServer,
+            PathObject selectedObject) {
         Rectangle rectangle = AwtTools.getBounds(selectedObject.getROI());
-        ImageRegion region = AwtTools.getImageRegion(rectangle, qupathViewer.getZPosition(), qupathViewer.getTPosition());
+        ImageRegion region = AwtTools.getImageRegion(rectangle, qupathViewer.getZPosition(),
+                qupathViewer.getTPosition());
 
-        RegionRequest viewerRegion = RegionRequest.createInstance(imageServer.getPath(), imageServer.getDownsampleForResolution(0), region);
+        RegionRequest viewerRegion = RegionRequest.createInstance(imageServer.getPath(),
+                imageServer.getDownsampleForResolution(0), region);
         return viewerRegion.intersect2D(0, 0, imageServer.getWidth(), imageServer.getHeight());
     }
 
@@ -440,48 +505,73 @@ public class Client {
             PathObjectHierarchy hierarchy = qupath.getViewer().getImageData().getHierarchy();
             for (PathObject obj : resultObjects) {
                 if (parentObject != null) {
-                    hierarchy.addObjectBelowParent(parentObject, PathObjects.createDetectionObject(obj.getROI(), obj.getPathClass(), obj.getMeasurementList()), false);
+                    hierarchy.addObjectBelowParent(parentObject, PathObjects.createDetectionObject(obj.getROI(),
+                            obj.getPathClass(), obj.getMeasurementList()), false);
                 }
                 hierarchy.getSelectionModel().setSelectedObject(obj, true);
             }
             // Update the hierarchy
             hierarchy.fireHierarchyChangedEvent(hierarchy.getRootObject());
-//            // Update the available classification classes
-//            Platform.runLater(() -> {
-//                updateClassifications(qupath, resultObjects);
-//            });
+            // // Update the available classification classes
+            // Platform.runLater(() -> {
+            // updateClassifications(qupath, resultObjects);
+            // });
         }
     }
 
-//    /**
-//     * Update the classification classes by adding the ones from the input list of pathObjects
-//     * Based on the promptToPopulateFromImage method in PathClassPane.java from qupath-gui-fx
-//     *
-//     * @param qupath
-//     * @param pathObjects
-//     */
-//    private void updateClassifications(QuPathGUI qupath, List<PathObject> pathObjects) {
-//        Set<PathClass> representedClasses = pathObjects.stream()
-//                .map(p -> p.getPathClass())
-//                .filter(p -> p != null && p != PathClass.NULL_CLASS)
-//                .map(p -> p.getBaseClass())
-//                .collect(Collectors.toSet());
-//
-//        List<PathClass> newClasses = new ArrayList<>(representedClasses);
-//        Collections.sort(newClasses);
-//        if (newClasses.isEmpty()) {
-//            return;
-//        }
-//
-//        newClasses.add(PathClass.StandardPathClasses.IGNORE);
-//        ObservableList<PathClass> availablePathClasses = qupath.getAvailablePathClasses();
-//        List<PathClass> currentClasses = new ArrayList<>(availablePathClasses);
-//        currentClasses.remove(null);
-//        if (currentClasses.equals(newClasses)) {
-//            return;
-//        }
-//
-//        newClasses.removeAll(availablePathClasses);
-//        availablePathClasses.addAll(newClasses);
-//    }
+    public static List<Float> decodeBase64TiffArray(String base64Str) throws Exception {
+        byte[] byteArray = Base64.getDecoder().decode(base64Str);
+        ByteArrayInputStream bais = new ByteArrayInputStream(byteArray);
+
+        BufferedImage image = ImageIO.read(bais);
+        if (image == null) {
+            throw new IllegalArgumentException("Could not decode TIFF image from input.");
+        }
+
+        DataBuffer dataBuffer = image.getRaster().getDataBuffer();
+        int size = dataBuffer.getSize();
+        List<Float> values = new ArrayList<>(size);
+
+        for (int i = 0; i < size; i++) {
+            values.add((float) dataBuffer.getElemDouble(i));
+        }
+
+        return values;
+    }
+
+    // /**
+    // * Update the classification classes by adding the ones from the input list of
+    // pathObjects
+    // * Based on the promptToPopulateFromImage method in PathClassPane.java from
+    // qupath-gui-fx
+    // *
+    // * @param qupath
+    // * @param pathObjects
+    // */
+    // private void updateClassifications(QuPathGUI qupath, List<PathObject>
+    // pathObjects) {
+    // Set<PathClass> representedClasses = pathObjects.stream()
+    // .map(p -> p.getPathClass())
+    // .filter(p -> p != null && p != PathClass.NULL_CLASS)
+    // .map(p -> p.getBaseClass())
+    // .collect(Collectors.toSet());
+    //
+    // List<PathClass> newClasses = new ArrayList<>(representedClasses);
+    // Collections.sort(newClasses);
+    // if (newClasses.isEmpty()) {
+    // return;
+    // }
+    //
+    // newClasses.add(PathClass.StandardPathClasses.IGNORE);
+    // ObservableList<PathClass> availablePathClasses =
+    // qupath.getAvailablePathClasses();
+    // List<PathClass> currentClasses = new ArrayList<>(availablePathClasses);
+    // currentClasses.remove(null);
+    // if (currentClasses.equals(newClasses)) {
+    // return;
+    // }
+    //
+    // newClasses.removeAll(availablePathClasses);
+    // availablePathClasses.addAll(newClasses);
+    // }
 }
