@@ -11,13 +11,9 @@ import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+import java.util.*;
 
 import javax.imageio.ImageIO;
 
@@ -33,6 +29,7 @@ import com.google.gson.JsonParser;
 import ij.ImagePlus;
 import ij.io.FileSaver;
 import javafx.collections.ObservableList;
+import javafx.application.Platform;
 import qupath.fx.dialogs.Dialogs;
 import qupath.imagej.tools.IJTools;
 import qupath.lib.awt.common.AwtTools;
@@ -47,8 +44,9 @@ import qupath.lib.images.servers.ImageServer;
 import qupath.lib.images.servers.TransformedServerBuilder;
 import qupath.lib.io.GsonTools;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.PathObjects;
+import qupath.lib.objects.PathObjectTools;
+import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.plugins.parameters.ParameterList;
 import qupath.lib.regions.ImagePlane;
@@ -230,9 +228,15 @@ public class Client {
             Dialogs.showErrorMessage("Python algos error", "No annotation selected");
             return;
         }
+
         ImageServer<BufferedImage> imageServer = getImageServer(qupathViewer);
         RegionRequest viewerRegion = getRegionRequest(qupathViewer, imageServer, selectedObject);
+
+        // This line (convert to ImagePlus) takes forever for images bigger than ~(40k, 40k)... Related to Integer.MAX_VALUE; see: https://gist.github.com/petebankhead/eff37389be8623596ef89e0d1e5a36bd
         ImagePlus img = IJTools.convertToImagePlus(imageServer, viewerRegion).getImage();
+
+
+        // ImagePlus to Base64-encoded string conversion:
         byte[] serializedImage = new FileSaver(img).serialize();
         String imgEncoded = Base64.getEncoder().encodeToString(serializedImage);
 
@@ -357,30 +361,30 @@ public class Client {
                     break;
             }
 
-            // Add decoded `measurements`
+            // Add decoded `measurements` and classification
             JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();
             if (dataParams.has("features")) {
                 JsonObject encodedFeatures = dataParams.getAsJsonObject().get("features").getAsJsonObject();
                 for (int idx = 0; idx < detections.size(); idx++) {
                     PathObject pathObject = detections.get(idx);
                     for (String key : encodedFeatures.keySet()) {
-                        System.out.println("Stopping");
-                        try {
-                            String encodedFeature = encodedFeatures.get(key).getAsString();
-                            List<Float> measurements = decodeBase64TiffArray(encodedFeature);
-                            if (idx < measurements.size()) {
-                                pathObject.getMeasurements().put(key, measurements.get(idx));
+                        if (key.equals("class")) {
+                            pathObject.setPathClass(PathClass.getInstance(encodedFeatures.get(key).getAsJsonArray().get(idx).getAsString()));
+                        } else {
+                            try {
+                                String encodedFeature = encodedFeatures.get(key).getAsString();
+                                List<Float> measurements = decodeBase64TiffArray(encodedFeature);
+                                if (idx < measurements.size()) {
+                                    pathObject.getMeasurements().put(key, measurements.get(idx));
+                                }
+                            } catch (Exception e) {
+                                throw new RuntimeException(e);
                             }
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
                         }
                     }
 
                 }
             }
-
-            // TODO: Add `classification`
-            // ...
 
             // Display the results
             this.displayResult(qupath, selectedObject, detections);
@@ -513,15 +517,17 @@ public class Client {
             }
             // Update the hierarchy
             hierarchy.fireHierarchyChangedEvent(hierarchy.getRootObject());
-            // // Update the available classification classes
-            // Platform.runLater(() -> {
-            // updateClassifications(qupath, resultObjects);
-            // });
+
+            // Update the available classification classes
+            Platform.runLater(() -> {
+                updateClassifications(qupath, resultObjects);
+            });
         }
     }
 
     /**
-     * Decode base64-encoded strings representing object measurements into 1D arrays of numbers 
+     * Decode base64-encoded strings representing object measurements into 1D arrays
+     * of numbers
      *
      * @param base64Str
      */
@@ -545,39 +551,37 @@ public class Client {
         return values;
     }
 
-    // /**
-    // * Update the classification classes by adding the ones from the input list of
-    // pathObjects
-    // * Based on the promptToPopulateFromImage method in PathClassPane.java from
-    // qupath-gui-fx
-    // *
-    // * @param qupath
-    // * @param pathObjects
-    // */
-    // private void updateClassifications(QuPathGUI qupath, List<PathObject>
-    // pathObjects) {
-    // Set<PathClass> representedClasses = pathObjects.stream()
-    // .map(p -> p.getPathClass())
-    // .filter(p -> p != null && p != PathClass.NULL_CLASS)
-    // .map(p -> p.getBaseClass())
-    // .collect(Collectors.toSet());
-    //
-    // List<PathClass> newClasses = new ArrayList<>(representedClasses);
-    // Collections.sort(newClasses);
-    // if (newClasses.isEmpty()) {
-    // return;
-    // }
-    //
-    // newClasses.add(PathClass.StandardPathClasses.IGNORE);
-    // ObservableList<PathClass> availablePathClasses =
-    // qupath.getAvailablePathClasses();
-    // List<PathClass> currentClasses = new ArrayList<>(availablePathClasses);
-    // currentClasses.remove(null);
-    // if (currentClasses.equals(newClasses)) {
-    // return;
-    // }
-    //
-    // newClasses.removeAll(availablePathClasses);
-    // availablePathClasses.addAll(newClasses);
-    // }
+    /**
+     * Update the classification classes by adding the ones from the input list of
+     * pathObjects
+     * Based on the promptToPopulateFromImage method in PathClassPane.java from
+     * qupath-gui-fx
+     *
+     * @param qupath
+     * @param pathObjects
+     */
+    private void updateClassifications(QuPathGUI qupath, List<PathObject> pathObjects) {
+        Set<PathClass> representedClasses = pathObjects.stream()
+                .map(p -> p.getPathClass())
+                .filter(p -> p != null && p != PathClass.NULL_CLASS)
+                .map(p -> p.getBaseClass())
+                .collect(Collectors.toSet());
+
+        List<PathClass> newClasses = new ArrayList<>(representedClasses);
+        Collections.sort(newClasses);
+        if (newClasses.isEmpty()) {
+            return;
+        }
+
+        newClasses.add(PathClass.StandardPathClasses.IGNORE);
+        ObservableList<PathClass> availablePathClasses = qupath.getAvailablePathClasses();
+        List<PathClass> currentClasses = new ArrayList<>(availablePathClasses);
+        currentClasses.remove(null);
+        if (currentClasses.equals(newClasses)) {
+            return;
+        }
+
+        newClasses.removeAll(availablePathClasses);
+        availablePathClasses.addAll(newClasses);
+    }
 }

@@ -203,10 +203,17 @@ public class ServerKitUI {
                                 parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
                                 break;
                             case "dropdown":
-                                JsonArray choicesArray = parameterValues.get("enum").getAsJsonArray();
-                                String[] choices = new String[choicesArray.size()];
-                                for (int i = 0; i < choicesArray.size(); i++) {
-                                    choices[i] = choicesArray.get(i).getAsString();
+                                String[] choices;
+                                if (parameterValues.has("enum")) {
+                                    JsonArray choicesArray = parameterValues.get("enum").getAsJsonArray();
+                                    choices = new String[choicesArray.size()];
+                                    for (int i = 0; i < choicesArray.size(); i++) {
+                                        choices[i] = choicesArray.get(i).getAsString();
+                                    }
+                                } else if (parameterValues.has("const")) {
+                                    choices = new String[] { parameterValues.get("const").getAsString() };
+                                } else {
+                                    throw new IllegalArgumentException("Dropdown parameter must have either 'enum' or 'const'");
                                 }
                                 parameterList.addChoiceParameter(key, prompt, choices[0],
                                         Arrays.stream(choices).toList(), description);
