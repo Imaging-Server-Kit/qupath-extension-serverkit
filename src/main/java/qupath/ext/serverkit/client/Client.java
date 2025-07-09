@@ -255,19 +255,18 @@ public class Client {
         // Process the response body
         JsonArray dataTuplesList = JsonParser.parseString(processingResponse.body()).getAsJsonArray();
         for (JsonElement element : dataTuplesList) {
+            JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();
             String resultType = element.getAsJsonObject().get("type").getAsString();
-
-            // Prepare stuff (tmp)
+            
             Gson gson = GsonTools.getInstance();
             AffineTransform transform = new AffineTransform();
             transform.translate(viewerRegion.getMinX(), viewerRegion.getMinY());
             transform.scale(viewerRegion.getDownsample(), viewerRegion.getDownsample());
             ImagePlane plane = viewerRegion.getImagePlane();
-
-            JsonArray encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
             List<PathObject> detections = new ArrayList<>();
 
             // Handle segmentation results returned as `features` (polygons)
+            JsonArray encodedData;
             switch (resultType) {
                 case "image":
                     Dialogs.showErrorMessage("Unhandled algo type", "Image filtering algorithms aren't supported");
@@ -276,6 +275,7 @@ public class Client {
                     Dialogs.showErrorMessage("Unhandled algo type", "Tracking algorithms aren't supported");
                     break;
                 case "mask":
+                    encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
                     List<PathObject> pathObjectsLabels = encodedData.asList().stream()
                             .map(e -> parsePathObject(gson, e))
                             .filter(Objects::nonNull)
@@ -291,6 +291,7 @@ public class Client {
                     }
                     break;
                 case "instance_mask":
+                    encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
                     List<PathObject> pathObjectsInstances = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
@@ -306,6 +307,7 @@ public class Client {
                     }
                     break;
                 case "points":
+                    encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
                     for (JsonElement pointElement : encodedData) {
                         List<Point2> pointDetections = new ArrayList<>();
                         JsonObject jsonObject = pointElement.getAsJsonObject();
@@ -329,6 +331,7 @@ public class Client {
                     break;
                 case "boxes":
                     // Handled just like labels
+                    encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
                     List<PathObject> pathObjectsBoxes = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
@@ -345,6 +348,7 @@ public class Client {
                     break;
                 case "vectors":
                     // Handled just like labels
+                    encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
                     List<PathObject> pathObjectsVectors = encodedData.asList().stream()
                             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
                             .filter(Objects::nonNull)
@@ -359,10 +363,24 @@ public class Client {
                         detections.add(pathObject);
                     }
                     break;
+                case "notification":
+                    String notificationText = element.getAsJsonObject().get("data").getAsString();
+                    String notificationLevel;
+                    if (dataParams.has("level")) {
+                        notificationLevel = dataParams.getAsJsonObject().get("level").getAsString();
+                    } else {
+                        notificationLevel = "info";
+                    }
+                    if (notificationLevel.equals("error")) {
+                        Dialogs.showErrorNotification("Server notification", notificationText);
+                    } else if (notificationLevel.equals("warning")) {
+                        Dialogs.showWarningNotification("Server notification", notificationText);
+                    } else {
+                        Dialogs.showInfoNotification("Server notification", notificationText);
+                    }
             }
 
             // Add decoded `measurements` and classification
-            JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();
             if (dataParams.has("features")) {
                 JsonObject encodedFeatures = dataParams.getAsJsonObject().get("features").getAsJsonObject();
                 for (int idx = 0; idx < detections.size(); idx++) {
