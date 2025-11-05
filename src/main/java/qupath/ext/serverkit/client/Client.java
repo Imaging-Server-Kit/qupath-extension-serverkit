@@ -7,6 +7,7 @@ import java.awt.image.DataBuffer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -138,6 +139,7 @@ public class Client {
         HttpRequest httpRequest = HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl + path))
                 .header("Content-Type", "application/json")
+                .header("User-Agent", "Java/QuPath")
                 .version(HttpClient.Version.HTTP_1_1)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
@@ -171,9 +173,9 @@ public class Client {
     }
 
     public String[] getAlgos() throws IOException, InterruptedException {
-        HttpResponse<String> servicesResponse = this.get("/services");
+        HttpResponse<String> servicesResponse = this.get("/algorithms");
         JsonObject algos = parseResponseToJsonObject(servicesResponse);
-        JsonArray algosJsonArray = algos.get("services").getAsJsonArray();
+        JsonArray algosJsonArray = algos.get("algorithms").getAsJsonArray();
         String[] arr = new String[algosJsonArray.size()];
         for (int i = 0; i < arr.length; i++) {
             arr[i] = algosJsonArray.get(i).getAsString();
@@ -182,15 +184,10 @@ public class Client {
         return arr;
     }
 
-    public JsonObject getParameters(String algoName) throws IOException, InterruptedException {
-        HttpResponse<String> paramsResponse = this.get("/" + algoName + "/parameters");
+    public JsonObject getParameters(String algoName) throws IOException, InterruptedException, URISyntaxException {
+        URI parameterURI = new URI(null, "/" + algoName + "/parameters", null);
+        HttpResponse<String> paramsResponse = this.get(parameterURI.toASCIIString());
         return parseResponseToJsonObjectList(paramsResponse);
-    }
-
-    public JsonArray getSampleImages(String algoName) throws IOException, InterruptedException {
-        HttpResponse<String> sampleImagesResponse = this.get("/" + algoName + "/sample_images");
-        JsonObject object = parseResponseToJsonObject(sampleImagesResponse);
-        return object.get("sample_images").getAsJsonArray();
     }
 
     /**
@@ -211,54 +208,79 @@ public class Client {
     }
 
     public void run(QuPathGUI qupath, QuPathViewer qupathViewer, String algoName, ParameterList parameterList)
-            throws ExecutionException, IOException, InterruptedException {
-
-        Map<String, Object> parametersMap = new LinkedHashMap<>();
-
-        // Convert parameters to JSON
+            throws ExecutionException, IOException, InterruptedException, URISyntaxException {
+        
+        // Convert parametersList to a JsonArray
+        JsonArray serializedParams = new JsonArray();
+        Gson gson = new Gson();
         if (parameterList != null) {
+            List<Map<String, Object>> intermediateList = new ArrayList<>();
             Map<String, Object> map = parameterList.getKeyValueParameters(false);
-            parametersMap.putAll(map);
+            // parametersMap.putAll(map);
+            Map<String, Object> parametersMap = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                String hintedKey = entry.getKey();
+                String[] parts = hintedKey.split("-");
+                String paramKey = parts[0];
+                String paramKind = parts[1];
+                Object paramValue = entry.getValue();
+                Map<String, Object> paramMeta = new HashMap<>();
+                parametersMap.put("kind", paramKind);
+                parametersMap.put("name", paramKey);
+                parametersMap.put("data", paramValue);
+                parametersMap.put("meta", paramMeta);
+                intermediateList.add(parametersMap);
+                JsonObject newJsonObject = gson.toJsonTree(parametersMap).getAsJsonObject();
+                serializedParams.add(newJsonObject);
+            }
         }
 
-        // Get the image within the selected annotation as JSON with "data" property and
-        // b64-encoded
+        // Get the b64-encoded image within the selected annotation as JSON
         PathObject selectedObject = getSelectedObject(qupathViewer);
         if (selectedObject == null) {
-            Dialogs.showErrorMessage("Python algos error", "No annotation selected");
+            Dialogs.showErrorMessage("Imaging Server Kit Error", "No annotation selected");
             return;
         }
 
         ImageServer<BufferedImage> imageServer = getImageServer(qupathViewer);
         RegionRequest viewerRegion = getRegionRequest(qupathViewer, imageServer, selectedObject);
 
-        // This line (convert to ImagePlus) takes forever for images bigger than ~(40k, 40k)... Related to Integer.MAX_VALUE; see: https://gist.github.com/petebankhead/eff37389be8623596ef89e0d1e5a36bd
+        // [MW] This convertion to ImagePlus takes forever for images bigger than ~(40k, 40k)...
+        // Related to Integer.MAX_VALUE; see: https://gist.github.com/petebankhead/eff37389be8623596ef89e0d1e5a36bd
         ImagePlus img = IJTools.convertToImagePlus(imageServer, viewerRegion).getImage();
-
 
         // ImagePlus to Base64-encoded string conversion:
         byte[] serializedImage = new FileSaver(img).serialize();
         String imgEncoded = Base64.getEncoder().encodeToString(serializedImage);
-
-        parametersMap.put("image", imgEncoded);
-
-        String parameters = ParameterList.convertToJson(parametersMap);
+        
+        // Add a parameter named "image" to the parameters stack
+        Map<String, Object> parametersMapImage = new LinkedHashMap<>();
+        Map<String, Object> paramMetaImage = new HashMap<>();
+        parametersMapImage.put("kind", "image");
+        parametersMapImage.put("name", "image-qupath");
+        parametersMapImage.put("data", imgEncoded);
+        parametersMapImage.put("meta", paramMetaImage);
+        JsonObject newJsonObject = gson.toJsonTree(parametersMapImage).getAsJsonObject();
+        serializedParams.add(newJsonObject);
 
         // Run the algo
-        HttpResponse<String> processingResponse = this.post("/" + algoName + "/process", parameters);
+        URI algoRunURI = new URI(null, "/" + algoName + "/process", null);
+        HttpResponse<String> runResponse = this.post(algoRunURI.toASCIIString(), serializedParams.toString());
 
-        if (processingResponse.statusCode() != 201) {
-            logHttpError(processingResponse, "Processing with " + algoName + " failed");
+        if (runResponse.statusCode() != 201) {
+            logHttpError(runResponse, "Processing with " + algoName + " failed");
             return;
         }
 
         // Process the response body
-        JsonArray dataTuplesList = JsonParser.parseString(processingResponse.body()).getAsJsonArray();
-        for (JsonElement element : dataTuplesList) {
-            JsonObject dataParams = element.getAsJsonObject().get("data_params").getAsJsonObject();
-            String resultType = element.getAsJsonObject().get("type").getAsString();
+        JsonArray serializedResults = JsonParser.parseString(runResponse.body()).getAsJsonArray();
+
+        for (JsonElement element : serializedResults) {
+
+            JsonObject meta = element.getAsJsonObject().get("meta").getAsJsonObject();
+            String kind = element.getAsJsonObject().get("kind").getAsString();
             
-            Gson gson = GsonTools.getInstance();
+            Gson gsonagain = GsonTools.getInstance();
             AffineTransform transform = new AffineTransform();
             transform.translate(viewerRegion.getMinX(), viewerRegion.getMinY());
             transform.scale(viewerRegion.getDownsample(), viewerRegion.getDownsample());
@@ -267,17 +289,22 @@ public class Client {
 
             // Handle segmentation results returned as `features` (polygons)
             JsonArray encodedData;
-            switch (resultType) {
+            switch (kind) {
+                // Types int, float, bool, str, etc. area also ignored.
                 case "image":
-                    Dialogs.showErrorMessage("Unhandled algo type", "Image filtering algorithms aren't supported");
+                    Dialogs.showErrorMessage("Unhandled algo type", "Algorithms that return image data aren't supported.");
                     break;
                 case "tracks":
-                    Dialogs.showErrorMessage("Unhandled algo type", "Tracking algorithms aren't supported");
+                    Dialogs.showErrorMessage("Unhandled algo type", "Tracking algorithms aren't supported.");
                     break;
+                case "paths":
+                    Dialogs.showErrorMessage("Unhandled algo type", "Paths algorithms aren't supported.");
+                    break;                
                 case "mask":
                     encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
+                    // Decode shapely features as polygons
                     List<PathObject> pathObjectsLabels = encodedData.asList().stream()
-                            .map(e -> parsePathObject(gson, e))
+                            .map(e -> parsePathObject(gsonagain, e))
                             .filter(Objects::nonNull)
                             .toList();
 
@@ -290,24 +317,25 @@ public class Client {
                         detections.add(pathObject);
                     }
                     break;
-                case "instance_mask":
-                    encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
-                    List<PathObject> pathObjectsInstances = encodedData.asList().stream()
-                            .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
-                            .filter(Objects::nonNull)
-                            .toList();
+                // case "instance_mask":
+                //     encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
+                //     List<PathObject> pathObjectsInstances = encodedData.asList().stream()
+                //             .map(e -> gson.fromJson(e.getAsJsonObject(), PathObject.class))
+                //             .filter(Objects::nonNull)
+                //             .toList();
 
-                    for (PathObject pathObject : pathObjectsInstances) {
-                        if (!transform.isIdentity()) {
-                            pathObject = PathObjectTools.transformObject(pathObject, transform, true);
-                        }
-                        if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
-                            pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
-                        detections.add(pathObject);
-                    }
-                    break;
+                //     for (PathObject pathObject : pathObjectsInstances) {
+                //         if (!transform.isIdentity()) {
+                //             pathObject = PathObjectTools.transformObject(pathObject, transform, true);
+                //         }
+                //         if (plane != null && !Objects.equals(plane, pathObject.getROI().getImagePlane()))
+                //             pathObject = PathObjectTools.updatePlane(pathObject, plane, true, false);
+                //         detections.add(pathObject);
+                //     }
+                //     break;
                 case "points":
                     encodedData = element.getAsJsonObject().get("data").getAsJsonArray();
+                    // Decode shapely features as points
                     for (JsonElement pointElement : encodedData) {
                         List<Point2> pointDetections = new ArrayList<>();
                         JsonObject jsonObject = pointElement.getAsJsonObject();
@@ -366,8 +394,8 @@ public class Client {
                 case "notification":
                     String notificationText = element.getAsJsonObject().get("data").getAsString();
                     String notificationLevel;
-                    if (dataParams.has("level")) {
-                        notificationLevel = dataParams.getAsJsonObject().get("level").getAsString();
+                    if (meta.has("level")) {
+                        notificationLevel = meta.getAsJsonObject().get("level").getAsString();
                     } else {
                         notificationLevel = "info";
                     }
@@ -381,8 +409,8 @@ public class Client {
             }
 
             // Add decoded `measurements` and classification
-            if (dataParams.has("features")) {
-                JsonObject encodedFeatures = dataParams.getAsJsonObject().get("features").getAsJsonObject();
+            if (meta.has("features")) {
+                JsonObject encodedFeatures = meta.getAsJsonObject().get("features").getAsJsonObject();
                 for (int idx = 0; idx < detections.size(); idx++) {
                     PathObject pathObject = detections.get(idx);
                     for (String key : encodedFeatures.keySet()) {

@@ -179,7 +179,7 @@ public class ServerKitUI {
                     for (Map.Entry<String, JsonElement> entry : parametersJson.entrySet()) {
                         String key = entry.getKey();
                         JsonObject parameterValues = entry.getValue().getAsJsonObject();
-                        String prompt = parameterValues.get("title").getAsString();
+                        String paramName = parameterValues.get("title").getAsString();
                         String description = parameterValues.get("description") != null
                                 ? parameterValues.get("description").getAsString()
                                 : null;
@@ -187,22 +187,27 @@ public class ServerKitUI {
                                 ? parameterValues.get("default")
                                 : null;
 
-                        switch (parameterValues.get("widget_type").getAsString()) {
+                        switch (parameterValues.get("param_type").getAsString()) {
                             case "bool":
-                                parameterList.addBooleanParameter(key, prompt, defaultValue.getAsBoolean(),
+                                String hintedKeyBool = key + "-" + "bool";
+                                parameterList.addBooleanParameter(hintedKeyBool, paramName, defaultValue.getAsBoolean(),
                                         description);
                                 break;
                             case "int":
-                                parameterList.addIntParameter(key, prompt, defaultValue.getAsInt(), null, description);
+                                String hintedKeyInt = key + "-" + "int";
+                                parameterList.addIntParameter(hintedKeyInt, paramName, defaultValue.getAsInt(), null, description);
                                 break;
                             case "float":
-                                parameterList.addDoubleParameter(key, prompt, defaultValue.getAsDouble(), null,
+                                String hintedKeyFloat = key + "-" + "float";
+                                parameterList.addDoubleParameter(hintedKeyFloat, paramName, defaultValue.getAsDouble(), null,
                                         description);
                                 break;
                             case "str":
-                                parameterList.addStringParameter(key, prompt, defaultValue.getAsString(), description);
+                                String hintedKeyString = key + "-" + "str";
+                                parameterList.addStringParameter(hintedKeyString, paramName, defaultValue.getAsString(), description);
                                 break;
-                            case "dropdown":
+                            case "choice":
+                                String hintedKeyChoice = key + "-" + "choice";
                                 String[] choices;
                                 if (parameterValues.has("enum")) {
                                     JsonArray choicesArray = parameterValues.get("enum").getAsJsonArray();
@@ -215,7 +220,7 @@ public class ServerKitUI {
                                 } else {
                                     throw new IllegalArgumentException("Dropdown parameter must have either 'enum' or 'const'");
                                 }
-                                parameterList.addChoiceParameter(key, prompt, choices[0],
+                                parameterList.addChoiceParameter(hintedKeyChoice, paramName, choices[0],
                                         Arrays.stream(choices).toList(), description);
                                 break;
                         }
